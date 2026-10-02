@@ -1,0 +1,6 @@
+generated: '2026-10-02'
+method: probed
+generator: harvest-llms.py
+source: https://www.loadoptimizer.ai/llms.txt
+bytes: 20271
+note: saved verbatim; the provider's own document

@@ -1,0 +1,20 @@
+generated: '2026-10-02'
+method: searched
+generator: extract-docs-artifacts.py (local)
+source: https://www.loadoptimizer.ai/docs/quickstart.html
+sources:
+- https://www.loadoptimizer.ai/docs/quickstart.html
+- https://www.loadoptimizer.ai/docs/authentication.html
+idempotency:
+  coverage: partial
+  header: Idempotency-Key
+  evidence: 'The Idempotency-Key header is optional (max 200 characters) but worth sending on every submit: retry the exact same request with
+    the same key and you get back the original job instead of a duplicate. Reusing the key with a different body is rejected with an empty 409.'
+  scope:
+  - not enumerated on the pages read
+pagination: {}
+versioning: v2 appears in the URL (e.g., https://api.loadoptimizer.ai/v2/...)
+error_envelope: 'Problem+json with a "code" field (e.g., 403 returns problem+json with code: "customer_api_not_entitled"). 401 returns empty body.'
+authentication: X-Api-Key header with a key that starts with ck_live_
+rate_limit_signaling: 429 responses include a Retry-After header for rate_limit_exceeded; other limits return 429 without Retry-After.
+docs: https://www.loadoptimizer.ai/docs/quickstart.html

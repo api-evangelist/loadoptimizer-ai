@@ -1,0 +1,20 @@
+openapi: 3.2.0
+info:
+  title: Load Optimizer Health API
+  version: 2.0.0
+  summary: Asynchronous box-packing / load-optimization API (the /v2 subset actually implemented today).
+  description: 'Submitting work is **asynchronous**: every solve is a *job* you create, poll it, then collect.'
+servers:
+- url: https://api.loadoptimizer.ai/v2
+  description: Production
+security:
+- ApiKey: []
+tags:
+- name: Health
+paths:
+  /health:
+    get:
+      operationId: getHealth
+      summary: Service liveness echo
+      tags:
+      - Health

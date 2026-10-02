@@ -1,0 +1,21 @@
+generated: '2026-10-02'
+method: searched
+generator: extract-docs-artifacts.py (local)
+source: https://www.loadoptimizer.ai/docs/webhooks.html
+sources:
+- https://www.loadoptimizer.ai/docs/webhooks.html
+description: LoadOptimizer.ai provides webhooks that notify when a job or batch reaches a terminal state.
+events:
+- event: job.succeeded
+  description: Sent when a job finishes successfully.
+- event: job.failed
+  description: Sent when a job finishes with a failure.
+- event: job.cancelled
+  description: Sent when a job is cancelled before completion.
+- event: batch.completed
+  description: Sent when a batch of jobs completes.
+delivery:
+  signature: Each delivery includes the headers X-Loadoptimizer-Timestamp (Unix epoch seconds) and X-Loadoptimizer-Signature (hex‑encoded HMAC‑SHA256
+    of timestamp + "." + raw_body, keyed with the endpoint secret).
+  retries: If the endpoint does not respond with a 2xx status or times out, the delivery is retried with exponential backoff.
+docs: https://www.loadoptimizer.ai/docs/webhooks.html

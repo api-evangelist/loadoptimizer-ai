@@ -1,0 +1,32 @@
+generated: '2026-10-02'
+method: searched
+generator: extract-docs-artifacts.py (local)
+source: https://www.loadoptimizer.ai/pricing/
+sources:
+- https://www.loadoptimizer.ai/pricing/
+- https://www.loadoptimizer.ai/cargo-load-planning-software/
+- https://www.loadoptimizer.ai/container-stuffing-software/
+- https://www.loadoptimizer.ai/automatic-container-loading/
+name: LoadOptimizer.ai pricing
+audience: business-product
+pricing_basis: negotiated
+plans:
+- name: Free
+  price_text: € 0
+  price: 0
+  billing_period: monthly
+- name: Standard
+  price_text: € 39.99
+  price: 39.99
+  billing_period: monthly
+- name: Pro
+  price_text: € 99.99
+  price: 99.99
+  billing_period: monthly
+- name: Business
+  price_text: € 399
+  price: 399
+  billing_period: monthly
+- name: Enterprise
+  price_text: Custom
+docs: https://www.loadoptimizer.ai/pricing/

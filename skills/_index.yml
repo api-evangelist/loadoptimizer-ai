@@ -1,0 +1,11 @@
+generated: '2026-10-02'
+method: generated
+generator: extract-docs-artifacts.py skills (local)
+source: openapi/loadoptimizer-ai-openapi.yml
+skills:
+- file: skills/loadoptimizer-ai-submit-optimization-job.md
+  name: loadoptimizer-ai-submit-optimization-job
+  api: openapi/loadoptimizer-ai-openapi.yml
+  operations:
+  - validateJob
+  - createJob

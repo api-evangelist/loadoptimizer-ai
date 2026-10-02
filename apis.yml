@@ -1,29 +1,111 @@
 aid: loadoptimizer-ai
+
 name: LoadOptimizer.ai
-description: 'LoadOptimizer.ai is a company surfaced via the API Evangelist harvest backlog (source: new-submission)
-  and added to the network as a stub for full-pipeline profiling.'
+
+description: LoadOptimizer.ai provides an AI‑powered 3‑D load‑planning service for containers, trucks and pallets. Its API lets developers submit
+  a job describing items, dimensions and constraints, then poll for a detailed load plan that optimizes space utilization, reduces trips and cuts
+  costs. The platform supports REST/JSON with OpenAPI 3.1, offers idempotent job handling, and includes authentication via API keys. It targets
+  logistics, shipping and warehousing companies seeking automated load optimization.
+
 url: https://raw.githubusercontent.com/api-evangelist/loadoptimizer-ai/refs/heads/main/apis.yml
+
 x-type: company
+
 x-source: harvest:new-submission
-x-tier: stub
-x-tier-reason: harvest
+
+x-tier: profiled
+x-tier-reason: enrichment pass 2026-10-02 (modular-v1; was harvest)
+
 specificationVersion: '0.20'
+
 created: '2026-10-02'
+
 modified: '2026-10-02'
+
 tags:
-- Company
-apis: []
+- Logistics
+- AI
+- Load Planning
+- Optimization
+- Shipping
+
 maintainers:
 - FN: Kin Lane
   email: kin@apievangelist.com
 - FN: APIs.json
   email: info@apis.io
+
 common:
+- type: AgenticAccess
+  url: agentic-access/loadoptimizer-ai-agentic-access.yml
+- type: Plans
+  url: plans/loadoptimizer-ai-plans-pricing.yml
+- type: Spectral
+  url: rules/loadoptimizer-ai-rules.yml
+- type: AgentSkill
+  url: skills/_index.yml
+- type: Webhooks
+  url: asyncapi/loadoptimizer-ai-webhooks.yml
+- type: Idempotency
+  url: conventions/loadoptimizer-ai-conventions.yml
+- type: Conventions
+  url: conventions/loadoptimizer-ai-conventions.yml
+- type: Authentication
+  url: authentication/loadoptimizer-ai-authentication.yml
+- type: Conformance
+  url: conformance/loadoptimizer-ai-conformance.yml
+- type: LLMsTxt
+  url: llms/loadoptimizer-ai-llms.txt
+- type: WellKnown
+  url: well-known/loadoptimizer-ai-well-known.yml
+- type: Hosts
+  url: hosts/loadoptimizer-ai-hosts.yml
+- type: TermsOfService
+  url: https://www.loadoptimizer.ai/terms-and-conditions/
+- type: Pricing
+  url: https://www.loadoptimizer.ai/pricing/
+- type: Login
+  url: https://app.loadoptimizer.ai/auth/sign-in
+- type: Blog
+  url: https://www.loadoptimizer.ai/blog
+- type: GettingStarted
+  url: https://www.loadoptimizer.ai/docs/quickstart.html
+- type: DomainSecurity
+  url: security/loadoptimizer-ai-domain-security.yml
 - type: Website
   url: https://www.loadoptimizer.ai/
 - type: Documentation
   url: https://www.loadoptimizer.ai/docs/
+
+apis:
+- aid: loadoptimizer-ai:loadoptimizer-ai-health-api
+  name: LoadOptimizer.ai Health API
+  description: The Health API from LoadOptimizer.ai — 1 operation(s) for health.
+  humanURL: https://www.loadoptimizer.ai/api-documentation/
+  baseURL: https://api.loadoptimizer.ai/v2
+  tags:
+  - Health
+  properties:
+  - type: OpenAPI
+    url: openapi/loadoptimizer-ai-health-api-openapi.yml
+- aid: loadoptimizer-ai:loadoptimizer-ai-jobs-api
+  name: LoadOptimizer.ai Jobs API
+  description: The Jobs API from LoadOptimizer.ai — 2 operation(s) for jobs.
+  humanURL: https://www.loadoptimizer.ai/api-documentation/
+  baseURL: https://api.loadoptimizer.ai/v2
+  tags:
+  - Jobs
+  properties:
+  - type: OpenAPI
+    url: openapi/loadoptimizer-ai-jobs-api-openapi.yml
 x-submission-notes: Async 3D load-planning API for containers, trucks and pallets.
-x-submission-probe: root 200; docs 200; OpenAPI 3.1.0 8 paths server api.loadoptimizer.ai/v2; llms.txt
-  200 (Rank Math generated); 404 probe 404
+
+x-submission-probe: root 200; docs 200; OpenAPI 3.1.0 8 paths server api.loadoptimizer.ai/v2; llms.txt 200 (Rank Math generated); 404 probe 404
+
 x-submitted-by: contact@loadoptimizer.ai (apis.io/add, 2026-10-01)
+x-enrichment:
+  date: '2026-10-02'
+  status: enriched
+  artifacts_added: 20
+  pass: modular-v1
+  engine: identity=local,contract=local,surfaces=local,docs=local,regulatory=local
