@@ -1,0 +1,29 @@
+aid: loadoptimizer-ai
+name: LoadOptimizer.ai
+description: 'LoadOptimizer.ai is a company surfaced via the API Evangelist harvest backlog (source: new-submission)
+  and added to the network as a stub for full-pipeline profiling.'
+url: https://raw.githubusercontent.com/api-evangelist/loadoptimizer-ai/refs/heads/main/apis.yml
+x-type: company
+x-source: harvest:new-submission
+x-tier: stub
+x-tier-reason: harvest
+specificationVersion: '0.20'
+created: '2026-10-02'
+modified: '2026-10-02'
+tags:
+- Company
+apis: []
+maintainers:
+- FN: Kin Lane
+  email: kin@apievangelist.com
+- FN: APIs.json
+  email: info@apis.io
+common:
+- type: Website
+  url: https://www.loadoptimizer.ai/
+- type: Documentation
+  url: https://www.loadoptimizer.ai/docs/
+x-submission-notes: Async 3D load-planning API for containers, trucks and pallets.
+x-submission-probe: root 200; docs 200; OpenAPI 3.1.0 8 paths server api.loadoptimizer.ai/v2; llms.txt
+  200 (Rank Math generated); 404 probe 404
+x-submitted-by: contact@loadoptimizer.ai (apis.io/add, 2026-10-01)
