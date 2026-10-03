@@ -1,25 +1,27 @@
 {
   "provider": "loadoptimizer-ai",
   "sources": [
-    "loadoptimizer-ai-openapi.yml"
+    "_original/loadoptimizer-ai-openapi.yml"
   ],
   "outputs": [
     "loadoptimizer-ai-health-api-openapi.yml",
     "loadoptimizer-ai-jobs-api-openapi.yml"
   ],
-  "archived": [
-    "archived openapi/loadoptimizer-ai-openapi.yml"
-  ],
+  "archived": [],
   "errors": [],
   "warnings": [],
   "notes": [
+    "sourced from openapi/_original/ (1 archived document(s)); previously refined output at the top level was skipped rather than re-split",
     "loadoptimizer-ai-openapi.yml: upgraded openapi 3.1.0 -> OpenAPI 3.2.0",
     "loadoptimizer-ai-openapi.yml: tagged paths GET /health -> Health",
     "loadoptimizer-ai-openapi.yml: tagged paths POST /jobs -> Jobs",
     "loadoptimizer-ai-openapi.yml: tagged paths POST /jobs/validate -> Jobs",
     "loadoptimizer-ai-openapi.yml: declared missing tag: Health",
     "loadoptimizer-ai-openapi.yml: declared missing tag: Jobs",
-    "apis.yml register: written (+2 apis, 2 total)"
+    "apis.yml register: already-registered"
   ],
-  "skipped": []
+  "skipped": [
+    "loadoptimizer-ai-health-api-openapi.yml: previously refined output, superseded by openapi/_original/",
+    "loadoptimizer-ai-jobs-api-openapi.yml: previously refined output, superseded by openapi/_original/"
+  ]
 }
