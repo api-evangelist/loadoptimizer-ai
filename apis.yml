@@ -24,6 +24,12 @@ modified: '2026-10-02'
 
 tags:
 - Logistics
+- Artificial Intelligence
+- Load Planning
+- Optimization
+- Shipping
+tags_raw:
+- Logistics
 - AI
 - Load Planning
 - Optimization
@@ -36,6 +42,9 @@ maintainers:
   email: info@apis.io
 
 common:
+- type: CapabilityMap
+  url: capabilities/loadoptimizer-ai-capability-edges.yml
+  name: LoadOptimizer.ai Business Capability Map
 - type: AgenticAccess
   url: agentic-access/loadoptimizer-ai-agentic-access.yml
 - type: Plans
@@ -94,6 +103,8 @@ apis:
   humanURL: https://www.loadoptimizer.ai/api-documentation/
   baseURL: https://api.loadoptimizer.ai/v2
   tags:
+  - Job
+  tags_raw:
   - Jobs
   properties:
   - type: OpenAPI
