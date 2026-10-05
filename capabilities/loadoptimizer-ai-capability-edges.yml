@@ -1,0 +1,26 @@
+slug: loadoptimizer-ai
+provider: LoadOptimizer.ai
+generated_by: planning/capability-mapping/scripts/classify_capabilities.py
+model: claude-opus-5
+frame:
+- Software & Technology
+min_confidence: 0.7
+capability_model:
+  source: https://github.com/vincentmakes/turbo-ea-capabilities
+  license: CC-BY-4.0
+  attribution: Turbo EA Capabilities by Vincent Verdet — Turbo EA, https://github.com/vincentmakes/turbo-ea-capabilities,
+    CC BY 4.0
+  notice: NOTICE
+edge_count: 1
+edges:
+- tag: Jobs
+  spec_file: loadoptimizer-ai-jobs-api-openapi.yml
+  capability_id: BC-520.50
+  capability_id_l1: BC-520
+  capability_name: Logistics Operations Management
+  confidence: 0.7
+  evidence: 'POST /jobs createJob ''Submit an optimization job''; vendor: ''AI‑powered 3‑D load‑planning
+    service for containers, trucks and pallets ... optimizes space utilization, reduces trips'''
+  reason: The job submitted is a load-plan solve for containers, trucks and pallets — transport load planning,
+    which sits within Logistics Operations Management. Confidence moderated because the tag itself is
+    a generic async job-submission surface and the business meaning comes from the vendor description.
