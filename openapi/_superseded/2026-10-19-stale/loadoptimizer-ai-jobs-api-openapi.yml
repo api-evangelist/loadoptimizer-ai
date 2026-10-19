@@ -1,0 +1,26 @@
+openapi: 3.2.0
+info:
+  title: Load Optimizer Jobs API
+  version: 2.0.0
+  summary: Asynchronous box-packing / load-optimization API (the /v2 subset actually implemented today).
+  description: 'Submitting work is **asynchronous**: every solve is a *job* you create, poll it, then collect.'
+servers:
+- url: https://api.loadoptimizer.ai/v2
+  description: Production
+security:
+- ApiKey: []
+tags:
+- name: Jobs
+paths:
+  /jobs:
+    post:
+      operationId: createJob
+      summary: Submit an optimization job
+      tags:
+      - Jobs
+  /jobs/validate:
+    post:
+      operationId: validateJob
+      summary: Dry-run validation of a request without creating a job
+      tags:
+      - Jobs

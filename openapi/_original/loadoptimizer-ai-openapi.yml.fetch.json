@@ -1,0 +1,12 @@
+{
+ "url": "https://www.loadoptimizer.ai/docs/loadoptimizer-openapi.yaml",
+ "final": "https://www.loadoptimizer.ai/docs/loadoptimizer-openapi.yaml",
+ "status": 200,
+ "content_type": "",
+ "bytes": 166060,
+ "sha256": "1ad35525358b5b8db51491ac903fd9da4c840e6cd905c29e1b7221d67b8f6ad2",
+ "fetched_at": "2026-10-19",
+ "fetched_by": "APIEvangelist-Harvest/1.0 (+https://apievangelist.com)",
+ "match": "byte-identical",
+ "note": "re-archived: the provider's current document replaced a stale archive (roadmap#793); the old files are in openapi/_superseded/2026-10-19-stale"
+}

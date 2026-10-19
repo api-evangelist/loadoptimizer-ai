@@ -2,19 +2,187 @@ openapi: 3.2.0
 info:
   title: Load Optimizer Health API
   version: 2.0.0
-  summary: Asynchronous box-packing / load-optimization API (the /v2 subset actually implemented today).
-  description: 'Submitting work is **asynchronous**: every solve is a *job* you create, poll it, then collect.'
+  summary: Asynchronous box-packing / load-optimization API.
+  description: 'Submitting work is **asynchronous**: every solve is a *job* you create, poll, then collect.
+
+
+    This is the documentation of the **Load Optimizer API v2**: it describes what `/v2` supports;
+
+    what it does not describe is not supported.
+
+
+    ## Job lifecycle
+
+    `queued → running → succeeded | failed | cancelled` (last three terminal). Poll `GET /jobs/{id}` until terminal.
+
+
+    ## Conventions
+
+    Values from a fixed set (enum values, in a request body or in list filters such as `status`, `saved` and
+
+    `sort`) are matched without regard to case, and come back in the spelling published here: `"MM"` reads
+
+    back as `"mm"`. Names and codes keep their case: group names, a SKU''s code (`externalId`, also as a
+
+    filter) and system-catalogue slugs are case-sensitive. The idempotency fingerprint compares the body as you
+
+    sent it: an enum value in another case makes a different body, so while the key is kept (see `Idempotency-Key`)
+
+    the same key gets the `409`.'
+  contact:
+    email: contact@loadoptimizer.ai
 servers:
 - url: https://api.loadoptimizer.ai/v2
-  description: Production
+  description: Production environment of the Load Optimizer API.
+  x-internal: false
 security:
 - ApiKey: []
 tags:
 - name: Health
+  description: Check that the API is up. Needs no API key and does not count against the rate limit.
 paths:
   /health:
     get:
-      operationId: getHealth
-      summary: Service liveness echo
       tags:
       - Health
+      operationId: getHealth
+      summary: Service liveness echo
+      description: 'Anonymous liveness check. Always answers `status: "ok"` if the API is up at all; it deliberately runs no readiness checks of its own. Sending your key is harmless but pointless: this operation sits outside the authenticated surface, so it answers the same whether you send one, send a bad one, or send none, and it never reports on your plan.'
+      security: []
+      responses:
+        '200':
+          description: The API is up and answering requests.
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                - status
+                - version
+                - apiVersion
+                properties:
+                  status:
+                    type: string
+                    enum:
+                    - ok
+                  version:
+                    type: string
+                    description: Opaque build identifier, e.g. `1a2b3c4d`. Compare it for equality to spot a deploy; do not parse it.
+                  apiVersion:
+                    type: string
+                    pattern: ^\d+\.\d+\.\d+$
+                    description: The version of the contract this API serves, the contract's `info.version`, such as `2.0.0`. The Changelog names each release by it, so compare the two to see which changes the API you call already has.
+              examples:
+                live:
+                  summary: The API is up
+                  value:
+                    status: ok
+                    version: 1a2b3c4d
+                    apiVersion: 2.0.0
+        '500':
+          $ref: '#/components/responses/ServerProblem'
+components:
+  schemas:
+    Problem:
+      type: object
+      description: 'RFC 9457 `problem+json`. `code` is stable & machine-readable when present; `errors[].pointer` locates
+
+        the offending field, query parameter or header. Two `/v2` errors have an **empty body** instead:
+
+        `401` and the idempotency `409`.
+
+        See [Errors & troubleshooting](errors.html).'
+      properties:
+        type:
+          type: string
+          format: uri
+          description: 'A reference for the response''s status code, not for the specific failure: two failures with different `code` values share one `type`. RFC 9457 permits `about:blank` here; this API never sends that, and the `429` responses carry no `type` at all. Switch on `code`, never on this field.'
+        title:
+          type: string
+        status:
+          type: integer
+          format: int32
+        detail:
+          type: string
+          description: Human-readable explanation, present on some errors and often naming the limit value that was exceeded. Never switch on it; switch on code.
+        code:
+          $ref: '#/components/schemas/ProblemCode'
+        errors:
+          type: array
+          description: Field-level problems. Only on a 400 `validation_failed`.
+          items:
+            type: object
+            properties:
+              pointer:
+                type: string
+                description: For a body field, a JSON Pointer (RFC 6901) into the request body, over the member names as this contract spells them (camelCase, also when you sent another case), e.g. /carriers/0/externalId. A name you chose yourself (a group name, an overrides member) appears as sent, with ~ written as ~0 and / as ~1. For a query parameter or a header, its name without a leading /, e.g. limit or Idempotency-Key. An empty string means the body as a whole.
+              code:
+                type: string
+                enum:
+                - validation_failed
+                - ambiguous_source
+                - library_entry_not_found
+                - override_field_not_allowed
+                description: 'validation_failed, unless a field code applies: ambiguous_source or library_entry_not_found on the libraryId of a job carrier or cargo line, or override_field_not_allowed on its overrides.'
+              message:
+                type: string
+      required:
+      - title
+      - status
+    ProblemCode:
+      type: string
+      description: Stable, machine-readable top-level error-code registry, by HTTP status.
+      enum:
+      - validation_failed
+      - ambiguous_source
+      - override_field_not_allowed
+      - customer_api_not_entitled
+      - mixed_palletizing_not_entitled
+      - load_planning_not_entitled
+      - link_sharing_not_entitled
+      - request_body_not_supported
+      - libraries_not_entitled
+      - library_read_only
+      - internal_server_error
+      - job_not_found
+      - result_not_ready
+      - artifact_not_ready
+      - saved_load_not_found
+      - library_not_found
+      - library_entry_not_found
+      - job_already_terminal
+      - job_not_succeeded
+      - saved_load_exists
+      - external_id_taken
+      - payload_too_large
+      - unsupported_media_type
+      - max_items_per_job
+      - max_carriers_per_job
+      - max_carrier_instances_per_job
+      - max_saved_loads
+      - max_library_entries
+      - too_many_active_jobs
+      - monthly_quota_exceeded
+      - rate_limit_exceeded
+  responses:
+    ServerProblem:
+      description: 'The request could not be completed for a reason the API did not anticipate. Transient as far as a caller can tell: retry, and if it persists contact support. The cause is recorded internally and is deliberately absent from the body, so there is nothing here to branch on beyond `code`.'
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/Problem'
+          examples:
+            internalServerError:
+              summary: An unanticipated failure while handling the request
+              value:
+                type: https://tools.ietf.org/html/rfc9110#section-15.6.1
+                title: Internal server error.
+                status: 500
+                code: internal_server_error
+                detail: The request could not be completed. Retry; if it keeps failing, contact support.
+  securitySchemes:
+    ApiKey:
+      type: apiKey
+      in: header
+      name: X-Api-Key
+      description: 'Customer API key bound to your account, e.g. `X-Api-Key: ck_live_...`. Create it in the web app (see https://app.loadoptimizer.ai/docs/api-keys); the full key is shown only once.'

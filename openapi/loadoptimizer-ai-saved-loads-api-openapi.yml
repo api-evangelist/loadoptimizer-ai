@@ -1,0 +1,610 @@
+openapi: 3.2.0
+info:
+  title: Load Optimizer Saved loads API
+  version: 2.0.0
+  summary: Asynchronous box-packing / load-optimization API.
+  description: 'Submitting work is **asynchronous**: every solve is a *job* you create, poll, then collect.
+
+
+    This is the documentation of the **Load Optimizer API v2**: it describes what `/v2` supports;
+
+    what it does not describe is not supported.
+
+
+    ## Job lifecycle
+
+    `queued → running → succeeded | failed | cancelled` (last three terminal). Poll `GET /jobs/{id}` until terminal.
+
+
+    ## Conventions
+
+    Values from a fixed set (enum values, in a request body or in list filters such as `status`, `saved` and
+
+    `sort`) are matched without regard to case, and come back in the spelling published here: `"MM"` reads
+
+    back as `"mm"`. Names and codes keep their case: group names, a SKU''s code (`externalId`, also as a
+
+    filter) and system-catalogue slugs are case-sensitive. The idempotency fingerprint compares the body as you
+
+    sent it: an enum value in another case makes a different body, so while the key is kept (see `Idempotency-Key`)
+
+    the same key gets the `409`.'
+  contact:
+    email: contact@loadoptimizer.ai
+servers:
+- url: https://api.loadoptimizer.ai/v2
+  description: Production environment of the Load Optimizer API.
+  x-internal: false
+security:
+- ApiKey: []
+tags:
+- name: Saved loads
+  description: Keep the runs that matter under a name, within your plan's limit per problem type.
+paths:
+  /saved-loads:
+    post:
+      tags:
+      - Saved loads
+      operationId: saveLoad
+      summary: Save a run as a saved load
+      description: 'Keeps one of your succeeded orders as a saved load, under the name you give it. A saved load is the run itself, kept: it has the run''s id, and the run''s request (`/jobs/{id}/input`), result, instructions and share link stay where they are, under `/jobs/{id}/...`. The name is the run''s name, so saving sets it and `PUT /jobs/{id}/name` changes it for both. Your plan allows a number of saved loads per problem type. At that limit the save is refused with `422`. A valid `replace` names one of your saved loads of the same problem type, which is released in the same call whether or not you are at the limit; a refused save releases nothing. Saving a run that is already saved answers `409` and changes nothing, so a retry after a timeout tells you the first attempt landed.'
+      parameters:
+      - name: jobId
+        in: query
+        required: true
+        description: 'The id of the run to save: one of your orders that has succeeded. A value that is not a UUID in its 36-character form is rejected with `400` against `jobId`.'
+        schema:
+          type: string
+          format: uuid
+          maxLength: 36
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+              - name
+              properties:
+                name:
+                  type: string
+                  minLength: 1
+                  maxLength: 256
+                  description: The name to keep it under. Trimmed, and stored on the run.
+                replace:
+                  type:
+                  - string
+                  - 'null'
+                  format: uuid
+                  maxLength: 36
+                  description: The id of one of your saved loads of the same problem type, released in the same call whether or not you are at the limit; a refused save releases nothing. A value that is not a UUID in its 36-character form, or that names a saved load of another problem type, is rejected with `400` against `/replace`.
+            examples:
+              save:
+                summary: Save a run
+                value:
+                  name: Rotterdam week 40
+              replace:
+                summary: Save it in place of an older one
+                value:
+                  name: Rotterdam week 41
+                  replace: 01975cbe-8d17-7a64-b2c9-4f06a1d3e5b8
+      responses:
+        '201':
+          description: Saved. The run is now a saved load.
+          headers:
+            Location:
+              description: URL of the saved load.
+              schema:
+                type: string
+                format: uri
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SavedLoad'
+              examples:
+                saved:
+                  summary: The run, kept as a saved load
+                  value:
+                    id: 01975cbc-1f40-7d21-9b3e-5a7c2e8f0d19
+                    name: Rotterdam week 40
+                    problemType: LoadPlanning
+                    createdAt: '2026-09-28T08:12:33.412+00:00'
+                    savedAt: '2026-10-01T14:03:10.007+00:00'
+        '400':
+          $ref: '#/components/responses/ValidationProblem'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          description: 'The run is not one of your orders (`code: "job_not_found"`: unknown, another account''s, or a loading-instructions job), or `replace` names no saved load of yours (`code: "saved_load_not_found"`).'
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+              examples:
+                unknownJob:
+                  $ref: '#/components/examples/JobNotFound'
+                unknownSavedLoad:
+                  $ref: '#/components/examples/SavedLoadNotFound'
+        '409':
+          description: 'The run has not succeeded (`code: "job_not_succeeded"`), or it is already saved (`code: "saved_load_exists"`; nothing was changed).'
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+              examples:
+                alreadySaved:
+                  summary: The run is already a saved load
+                  value:
+                    type: https://tools.ietf.org/html/rfc9110#section-15.5.10
+                    title: This run is already saved.
+                    status: 409
+                    code: saved_load_exists
+        '413':
+          $ref: '#/components/responses/PayloadTooLarge'
+        '415':
+          $ref: '#/components/responses/UnsupportedMediaType'
+        '422':
+          description: 'Your plan''s saved-load limit for this problem type is reached (`code: "max_saved_loads"`); `detail` names the limit. Release a saved load, or name it in `replace`.'
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+              examples:
+                limitReached:
+                  summary: Every place for this problem type is taken
+                  value:
+                    type: https://tools.ietf.org/html/rfc4918#section-11.2
+                    title: Saved-load limit reached.
+                    status: 422
+                    code: max_saved_loads
+                    detail: The account keeps at most 10 saved loads of this problem type.
+        '429':
+          $ref: '#/components/responses/RateLimited'
+        '500':
+          $ref: '#/components/responses/ServerProblem'
+    get:
+      tags:
+      - Saved loads
+      operationId: listSavedLoads
+      summary: List saved loads
+      description: Your saved loads, a page at a time, the most recently saved first unless you sort otherwise. Each item is the same `SavedLoad` that `GET /saved-loads/{id}` returns. Follow `nextCursor` until it is null, passing the same filters, `sort` and `direction` on every page. There is no total count. Every invalid parameter is reported at once, in one `400` with one `errors[]` entry per parameter, whose `pointer` is the parameter's name.
+      parameters:
+      - name: problemType
+        in: query
+        required: false
+        style: form
+        explode: true
+        description: Only saved loads of one of these problem types. Repeat the parameter for several.
+        schema:
+          type: array
+          items:
+            type: string
+            enum:
+            - LoadPlanning
+            - MixedPalletizing
+      - name: q
+        in: query
+        required: false
+        description: 'Only saved loads whose `name` contains this text, ignoring case. Matched literally: `%` and `_` are ordinary characters. Leading and trailing whitespace is ignored. At most 256 characters.'
+        schema:
+          type: string
+          maxLength: 256
+      - name: savedFrom
+        in: query
+        required: false
+        description: Only loads saved at or after this moment (inclusive). An RFC 3339 date-time with an offset; in a URL, send a `+` offset as `%2B`.
+        schema:
+          type: string
+          format: date-time
+          maxLength: 33
+      - name: savedTo
+        in: query
+        required: false
+        description: Only loads saved before this moment (exclusive). Same format as `savedFrom`, and not earlier than it.
+        schema:
+          type: string
+          format: date-time
+          maxLength: 33
+      - name: sort
+        in: query
+        required: false
+        description: 'The order of the list: when it was saved, when the run was submitted, its name, or its problem type. Within equal names or problem types the most recently saved comes first. Within equal times (`savedAt`, `createdAt`) the order follows the id of the run, in the direction you ask for. Under `sort=name`, a load whose name was cleared comes last in both directions.'
+        schema:
+          type: string
+          enum:
+          - savedAt
+          - createdAt
+          - name
+          - problemType
+          default: savedAt
+      - name: direction
+        in: query
+        required: false
+        description: 'The sort direction: `desc` by default for `savedAt` and `createdAt` (newest first), `asc` for `name` and `problemType`.'
+        schema:
+          type: string
+          enum:
+          - asc
+          - desc
+      - name: limit
+        in: query
+        required: false
+        description: Saved loads per page, 1 to 50. Default 50.
+        schema:
+          type: integer
+          format: int32
+          minimum: 1
+          maximum: 50
+          default: 50
+      - name: cursor
+        in: query
+        required: false
+        description: The `nextCursor` of the previous page, passed back unchanged with the same `sort` and `direction`. A value this API did not issue, one issued by the other list, or one issued for another sort or direction, is rejected with `400`. At most 4,096 characters.
+        schema:
+          type: string
+          maxLength: 4096
+      responses:
+        '200':
+          description: One page of saved loads.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SavedLoadPage'
+              examples:
+                onePage:
+                  summary: Everything fits on one page
+                  value:
+                    items:
+                    - id: 01975cbc-1f40-7d21-9b3e-5a7c2e8f0d19
+                      name: Rotterdam week 40
+                      problemType: LoadPlanning
+                      createdAt: '2026-09-28T08:12:33.412+00:00'
+                      savedAt: '2026-10-01T14:03:10.007+00:00'
+                    - id: 01975cbe-8d17-7a64-b2c9-4f06a1d3e5b8
+                      name: Rotterdam week 39
+                      problemType: LoadPlanning
+                      createdAt: '2026-09-21T08:12:33.412+00:00'
+                      savedAt: '2026-09-24T09:30:00.000+00:00'
+                    nextCursor: null
+        '400':
+          $ref: '#/components/responses/ValidationProblem'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+        '500':
+          $ref: '#/components/responses/ServerProblem'
+  /saved-loads/{id}:
+    parameters:
+    - $ref: '#/components/parameters/SavedLoadId'
+    get:
+      tags:
+      - Saved loads
+      operationId: getSavedLoad
+      summary: Get a saved load
+      description: One of your saved loads, by its id, which is also its run's job id. An unknown id, a released load and another account's load all answer `404`.
+      responses:
+        '200':
+          description: The saved load. Its request (`/jobs/{id}/input`), result, instructions and share link are under `/jobs/{id}/...`, with the same id.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SavedLoad'
+              examples:
+                saved:
+                  summary: A saved load
+                  value:
+                    id: 01975cbc-1f40-7d21-9b3e-5a7c2e8f0d19
+                    name: Rotterdam week 40
+                    problemType: LoadPlanning
+                    createdAt: '2026-09-28T08:12:33.412+00:00'
+                    savedAt: '2026-10-01T14:03:10.007+00:00'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/SavedLoadNotFoundProblem'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+        '500':
+          $ref: '#/components/responses/ServerProblem'
+    delete:
+      tags:
+      - Saved loads
+      operationId: deleteSavedLoad
+      summary: Release a saved load
+      description: 'Stops keeping the run, so it no longer counts against your limit. The run itself is untouched: its result and name stay, and `GET /jobs?saved=false` lists it again. To undo, save it again. Never limited by your plan, so an account over its limit can always make room.'
+      responses:
+        '204':
+          description: Released. The run itself is untouched.
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/SavedLoadNotFoundProblem'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+        '500':
+          $ref: '#/components/responses/ServerProblem'
+components:
+  responses:
+    SavedLoadNotFoundProblem:
+      description: 'Unknown saved-load id, one that is not a UUID in its 36-character form, one already released, or one belonging to another account: all answer identically (no existence leak).'
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/Problem'
+          examples:
+            unknownSavedLoad:
+              $ref: '#/components/examples/SavedLoadNotFound'
+    PayloadTooLarge:
+      description: 'The request body is larger than the API will read (`code: "payload_too_large"`). Permanent for that body: split the order into smaller jobs rather than retrying it unchanged.'
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/Problem'
+          examples:
+            bodyTooLarge:
+              summary: A body past the size the API reads
+              value:
+                type: https://tools.ietf.org/html/rfc9110#section-15.5.14
+                title: Payload too large.
+                status: 413
+                code: payload_too_large
+                detail: The request body is larger than this API accepts. Split the order into smaller jobs.
+    ValidationProblem:
+      description: 'Validation failed: `code: "validation_failed"`, with `errors[]` naming each offending field, query parameter or header. Every 400 on `/v2` has this shape; see Errors & troubleshooting.'
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/Problem'
+          examples:
+            invalidGeometry:
+              summary: A cargo line with a geometry type the API does not implement
+              value:
+                type: https://tools.ietf.org/html/rfc9110#section-15.5.1
+                title: Validation failed.
+                status: 400
+                code: validation_failed
+                errors:
+                - pointer: /cargo/0/geometry/type
+                  code: validation_failed
+                  message: Only 'box' geometry is supported.
+    ServerProblem:
+      description: 'The request could not be completed for a reason the API did not anticipate. Transient as far as a caller can tell: retry, and if it persists contact support. The cause is recorded internally and is deliberately absent from the body, so there is nothing here to branch on beyond `code`.'
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/Problem'
+          examples:
+            internalServerError:
+              summary: An unanticipated failure while handling the request
+              value:
+                type: https://tools.ietf.org/html/rfc9110#section-15.6.1
+                title: Internal server error.
+                status: 500
+                code: internal_server_error
+                detail: The request could not be completed. Retry; if it keeps failing, contact support.
+    UnsupportedMediaType:
+      description: 'The request body was sent under a content type other than `application/json`, or without one (`code: "unsupported_media_type"`). These operations read JSON only.'
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/Problem'
+          examples:
+            wrongContentType:
+              summary: A body sent as something other than JSON
+              value:
+                type: https://tools.ietf.org/html/rfc9110#section-15.5.16
+                title: Unsupported media type.
+                status: 415
+                code: unsupported_media_type
+                detail: Send the request body as application/json.
+    Unauthorized:
+      description: Missing, invalid or revoked API key. Empty body.
+    Forbidden:
+      description: 'The API key is valid, but the account''s plan does not include customer-API access (`code: "customer_api_not_entitled"`). Permanent, not transient: retrying will not help; the account''s plan must add customer-API access first.'
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/Problem'
+          examples:
+            notEntitled:
+              $ref: '#/components/examples/NotEntitled'
+    RateLimited:
+      description: 'Too many requests, too fast (`code: "rate_limit_exceeded"`). The account may make **300 requests per minute** across `/v2`, replenished continuously, and every operation except `GET /health` counts. The request was not carried out: wait the number of seconds in the **`Retry-After`** header, then send it again. A full queue and a used-up monthly quota answer `429` on `POST /jobs` only.'
+      headers:
+        Retry-After:
+          description: Seconds to wait before retrying.
+          schema:
+            type: integer
+            format: int32
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/Problem'
+          examples:
+            rateLimited:
+              summary: Too many requests too fast
+              value:
+                title: Too many requests.
+                status: 429
+                code: rate_limit_exceeded
+                detail: The account exceeded the request rate for the customer API. Retry after the number of seconds in the Retry-After header.
+  schemas:
+    ProblemCode:
+      type: string
+      description: Stable, machine-readable top-level error-code registry, by HTTP status.
+      enum:
+      - validation_failed
+      - ambiguous_source
+      - override_field_not_allowed
+      - customer_api_not_entitled
+      - mixed_palletizing_not_entitled
+      - load_planning_not_entitled
+      - link_sharing_not_entitled
+      - request_body_not_supported
+      - libraries_not_entitled
+      - library_read_only
+      - internal_server_error
+      - job_not_found
+      - result_not_ready
+      - artifact_not_ready
+      - saved_load_not_found
+      - library_not_found
+      - library_entry_not_found
+      - job_already_terminal
+      - job_not_succeeded
+      - saved_load_exists
+      - external_id_taken
+      - payload_too_large
+      - unsupported_media_type
+      - max_items_per_job
+      - max_carriers_per_job
+      - max_carrier_instances_per_job
+      - max_saved_loads
+      - max_library_entries
+      - too_many_active_jobs
+      - monthly_quota_exceeded
+      - rate_limit_exceeded
+    SavedLoadPage:
+      type: object
+      required:
+      - items
+      - nextCursor
+      description: One page of `GET /saved-loads`.
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/SavedLoad'
+        nextCursor:
+          type:
+          - string
+          - 'null'
+          pattern: ^[A-Za-z0-9_-]+$
+          description: 'Pass it as `cursor` for the next page; null on the last page. Opaque: do not build or parse it.'
+    Problem:
+      type: object
+      description: 'RFC 9457 `problem+json`. `code` is stable & machine-readable when present; `errors[].pointer` locates
+
+        the offending field, query parameter or header. Two `/v2` errors have an **empty body** instead:
+
+        `401` and the idempotency `409`.
+
+        See [Errors & troubleshooting](errors.html).'
+      properties:
+        type:
+          type: string
+          format: uri
+          description: 'A reference for the response''s status code, not for the specific failure: two failures with different `code` values share one `type`. RFC 9457 permits `about:blank` here; this API never sends that, and the `429` responses carry no `type` at all. Switch on `code`, never on this field.'
+        title:
+          type: string
+        status:
+          type: integer
+          format: int32
+        detail:
+          type: string
+          description: Human-readable explanation, present on some errors and often naming the limit value that was exceeded. Never switch on it; switch on code.
+        code:
+          $ref: '#/components/schemas/ProblemCode'
+        errors:
+          type: array
+          description: Field-level problems. Only on a 400 `validation_failed`.
+          items:
+            type: object
+            properties:
+              pointer:
+                type: string
+                description: For a body field, a JSON Pointer (RFC 6901) into the request body, over the member names as this contract spells them (camelCase, also when you sent another case), e.g. /carriers/0/externalId. A name you chose yourself (a group name, an overrides member) appears as sent, with ~ written as ~0 and / as ~1. For a query parameter or a header, its name without a leading /, e.g. limit or Idempotency-Key. An empty string means the body as a whole.
+              code:
+                type: string
+                enum:
+                - validation_failed
+                - ambiguous_source
+                - library_entry_not_found
+                - override_field_not_allowed
+                description: 'validation_failed, unless a field code applies: ambiguous_source or library_entry_not_found on the libraryId of a job carrier or cargo line, or override_field_not_allowed on its overrides.'
+              message:
+                type: string
+      required:
+      - title
+      - status
+    SavedLoad:
+      type: object
+      required:
+      - id
+      - name
+      - problemType
+      - createdAt
+      - savedAt
+      description: A run you kept. Its id is the run's job id; the request (`/jobs/{id}/input`), result, instructions and share link stay under `/jobs/{id}/...`.
+      properties:
+        id:
+          type: string
+          format: uuid
+          description: 'The run''s job id: its request, result, instructions and share link are under `/jobs/{id}/...`.'
+        name:
+          type:
+          - string
+          - 'null'
+          maxLength: 256
+          description: The run's name. Set when saving; null only when it was cleared afterwards with `PUT /jobs/{id}/name`.
+        problemType:
+          type: string
+          enum:
+          - LoadPlanning
+          - MixedPalletizing
+        createdAt:
+          type: string
+          format: date-time
+          description: When the run was submitted (UTC).
+        savedAt:
+          type: string
+          format: date-time
+          description: When it was saved (UTC).
+  examples:
+    NotEntitled:
+      summary: The key is valid; the plan is not
+      value:
+        type: https://tools.ietf.org/html/rfc9110#section-15.5.4
+        title: The account's plan does not include the customer API.
+        status: 403
+        code: customer_api_not_entitled
+        detail: 'Upgrade the account to a plan that includes customer-API access: https://app.loadoptimizer.ai/home/billing'
+    SavedLoadNotFound:
+      summary: Unknown, released, or someone else's saved load
+      value:
+        type: https://tools.ietf.org/html/rfc9110#section-15.5.5
+        title: Saved load not found.
+        status: 404
+        code: saved_load_not_found
+    JobNotFound:
+      summary: Unknown id, or someone else's job
+      value:
+        type: https://tools.ietf.org/html/rfc9110#section-15.5.5
+        title: Job not found.
+        status: 404
+        code: job_not_found
+  parameters:
+    SavedLoadId:
+      name: id
+      in: path
+      required: true
+      description: The saved load's id, which is also its run's job id.
+      schema:
+        type: string
+        format: uuid
+        maxLength: 36
+  securitySchemes:
+    ApiKey:
+      type: apiKey
+      in: header
+      name: X-Api-Key
+      description: 'Customer API key bound to your account, e.g. `X-Api-Key: ck_live_...`. Create it in the web app (see https://app.loadoptimizer.ai/docs/api-keys); the full key is shown only once.'

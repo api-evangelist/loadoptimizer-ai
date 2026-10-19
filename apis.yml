@@ -109,6 +109,26 @@ apis:
   properties:
   - type: OpenAPI
     url: openapi/loadoptimizer-ai-jobs-api-openapi.yml
+- aid: loadoptimizer-ai:loadoptimizer-ai-libraries-api
+  name: LoadOptimizer.ai Libraries API
+  description: Store your own carriers and cargo units (SKUs) once and reference them from a job by id.
+  humanURL: https://www.loadoptimizer.ai/api-documentation/
+  baseURL: https://api.loadoptimizer.ai/v2
+  tags:
+  - Libraries
+  properties:
+  - type: OpenAPI
+    url: openapi/loadoptimizer-ai-libraries-api-openapi.yml
+- aid: loadoptimizer-ai:loadoptimizer-ai-saved-loads-api
+  name: LoadOptimizer.ai Saved loads API
+  description: Keep the runs that matter under a name, within your plan's limit per problem type.
+  humanURL: https://www.loadoptimizer.ai/api-documentation/
+  baseURL: https://api.loadoptimizer.ai/v2
+  tags:
+  - Saved loads
+  properties:
+  - type: OpenAPI
+    url: openapi/loadoptimizer-ai-saved-loads-api-openapi.yml
 x-submission-notes: Async 3D load-planning API for containers, trucks and pallets.
 
 x-submission-probe: root 200; docs 200; OpenAPI 3.1.0 8 paths server api.loadoptimizer.ai/v2; llms.txt 200 (Rank Math generated); 404 probe 404

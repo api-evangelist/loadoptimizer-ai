@@ -2,25 +2,2442 @@ openapi: 3.2.0
 info:
   title: Load Optimizer Jobs API
   version: 2.0.0
-  summary: Asynchronous box-packing / load-optimization API (the /v2 subset actually implemented today).
-  description: 'Submitting work is **asynchronous**: every solve is a *job* you create, poll it, then collect.'
+  summary: Asynchronous box-packing / load-optimization API.
+  description: 'Submitting work is **asynchronous**: every solve is a *job* you create, poll, then collect.
+
+
+    This is the documentation of the **Load Optimizer API v2**: it describes what `/v2` supports;
+
+    what it does not describe is not supported.
+
+
+    ## Job lifecycle
+
+    `queued → running → succeeded | failed | cancelled` (last three terminal). Poll `GET /jobs/{id}` until terminal.
+
+
+    ## Conventions
+
+    Values from a fixed set (enum values, in a request body or in list filters such as `status`, `saved` and
+
+    `sort`) are matched without regard to case, and come back in the spelling published here: `"MM"` reads
+
+    back as `"mm"`. Names and codes keep their case: group names, a SKU''s code (`externalId`, also as a
+
+    filter) and system-catalogue slugs are case-sensitive. The idempotency fingerprint compares the body as you
+
+    sent it: an enum value in another case makes a different body, so while the key is kept (see `Idempotency-Key`)
+
+    the same key gets the `409`.'
+  contact:
+    email: contact@loadoptimizer.ai
 servers:
 - url: https://api.loadoptimizer.ai/v2
-  description: Production
+  description: Production environment of the Load Optimizer API.
+  x-internal: false
 security:
 - ApiKey: []
 tags:
 - name: Jobs
+  description: Submit, poll, fetch and cancel optimization jobs; loading-instruction PDFs and share links.
 paths:
   /jobs:
+    get:
+      tags:
+      - Jobs
+      operationId: listJobs
+      summary: List orders
+      description: The orders your account submitted, a page at a time, newest first unless you sort otherwise. A loading-instructions job is not listed; reach it through the id `POST /jobs/{id}/instructions` returned. Each item is the same `JobStatus` that `GET /jobs/{id}` returns. Follow `nextCursor` until it is null, passing the same filters, `sort` and `direction` on every page. There is no total count. Every invalid parameter is reported at once, in one `400` with one `errors[]` entry per parameter, whose `pointer` is the parameter's name.
+      parameters:
+      - name: status
+        in: query
+        required: false
+        style: form
+        explode: true
+        description: 'Only orders in one of these statuses. Repeat the parameter for several: `?status=succeeded&status=cancelled`.'
+        schema:
+          type: array
+          items:
+            type: string
+            enum:
+            - queued
+            - running
+            - succeeded
+            - failed
+            - cancelled
+      - name: problemType
+        in: query
+        required: false
+        style: form
+        explode: true
+        description: Only orders of one of these problem types. Repeatable, like `status`; different filters combine.
+        schema:
+          type: array
+          items:
+            type: string
+            enum:
+            - LoadPlanning
+            - MixedPalletizing
+      - name: q
+        in: query
+        required: false
+        description: 'Only orders whose `name` contains this text, ignoring case. Matched literally: `%` and `_` are ordinary characters. Leading and trailing whitespace is ignored. At most 256 characters.'
+        schema:
+          type: string
+          maxLength: 256
+      - name: createdFrom
+        in: query
+        required: false
+        description: Only orders submitted at or after this moment (inclusive). An RFC 3339 date-time with an offset, e.g. `2026-09-01T00:00:00Z`; in a URL, send a `+` offset as `%2B`.
+        schema:
+          type: string
+          format: date-time
+          maxLength: 33
+      - name: createdTo
+        in: query
+        required: false
+        description: Only orders submitted before this moment (exclusive), so consecutive windows neither overlap nor leave a gap. Same format as `createdFrom`, and not earlier than it.
+        schema:
+          type: string
+          format: date-time
+          maxLength: 33
+      - name: saved
+        in: query
+        required: false
+        description: Only orders kept as a saved load (`true`), or only those that are not (`false`). Omit it for both. One value; anything else, a repeat or an empty value included, is rejected with `400` on `saved`.
+        schema:
+          type: boolean
+      - name: sort
+        in: query
+        required: false
+        description: The order of the list. Within equal names or problem types the newest order comes first, and orders created at the same moment follow their id, in the direction you ask for under `sort=createdAt`. Under `sort=name`, orders without a name come last in both directions, and an order renamed while you page through the list can move.
+        schema:
+          type: string
+          enum:
+          - createdAt
+          - name
+          - problemType
+          default: createdAt
+      - name: direction
+        in: query
+        required: false
+        description: 'The sort direction: `desc` by default for `createdAt` (newest first), `asc` for `name` and `problemType`.'
+        schema:
+          type: string
+          enum:
+          - asc
+          - desc
+      - name: limit
+        in: query
+        required: false
+        description: Orders per page, 1 to 50. Default 50.
+        schema:
+          type: integer
+          format: int32
+          minimum: 1
+          maximum: 50
+          default: 50
+      - name: cursor
+        in: query
+        required: false
+        description: The `nextCursor` of the previous page, passed back unchanged with the same `sort` and `direction`. A value this API did not issue, one issued by the other list, or one issued for another sort or direction, is rejected with `400`. At most 4,096 characters.
+        schema:
+          type: string
+          maxLength: 4096
+      responses:
+        '200':
+          description: One page of the orders your account submitted.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/JobPage'
+              examples:
+                firstPage:
+                  summary: A page with more to follow
+                  value:
+                    items:
+                    - jobId: 01975cbc-1f40-7d21-9b3e-5a7c2e8f0d19
+                      status: succeeded
+                      percentage: 100
+                      queuePosition: null
+                      errorCategory: null
+                      error: null
+                      name: Rotterdam week 40
+                      createdAt: '2026-09-28T08:12:33.412+00:00'
+                      problemType: LoadPlanning
+                      saved: true
+                    nextCursor: djE6WyJjcmVhdGVkQXQiLCJkZXNjIixudWxsLCIyMDI2LTA5LTI4VDA4OjEyOjMzLjQxMiswMDowMCIsIjAxOTc1Y2JjLTFmNDAtN2QyMS05YjNlLTVhN2MyZThmMGQxOSJd
+                lastPage:
+                  summary: The last page
+                  value:
+                    items:
+                    - jobId: 01975cbd-3a52-7e8f-8c14-6d0b9f3e7a52
+                      status: failed
+                      percentage: 50
+                      queuePosition: null
+                      errorCategory: solver_error
+                      error:
+                        code: solver_error
+                        message: The solve did not complete. Please retry.
+                      name: null
+                      createdAt: '2026-08-18T15:47:02.861+00:00'
+                      problemType: LoadPlanning
+                      saved: false
+                    nextCursor: null
+        '400':
+          $ref: '#/components/responses/ValidationProblem'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+        '500':
+          $ref: '#/components/responses/ServerProblem'
     post:
+      tags:
+      - Jobs
       operationId: createJob
       summary: Submit an optimization job
-      tags:
-      - Jobs
+      description: 'Validates the request (`400` on failure), then queues it for solving. Returns `202` with the job id
+
+        and its status: `queued` for a new job, its current status for a replay.
+
+        This surface has no synchronous fast path; poll `GET /jobs/{id}`
+
+        for progress. An optional `Idempotency-Key` header (`<=200` chars) makes a repeat submit with the
+
+        same body return the original job instead of creating a duplicate, for at least 24 hours after it
+
+        was submitted, and for as long as it is queued or running. In that window the same key with a
+
+        different body is rejected with `409` (empty body); after it, the same key can start a new job.
+
+        The whole submitted body is the fingerprint, values as sent (an enum value in another case is a different body), `units`
+
+        included: retrying the same key with different units is a different body, and gets the `409`, not
+
+        a replay of the original job.'
+      parameters:
+      - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/JobRequest'
+            examples:
+              onePalletTwoBoxes:
+                $ref: '#/components/examples/OnePalletTwoBoxes'
+              mixedPalletsForOneStore:
+                $ref: '#/components/examples/MixedPalletsForOneStore'
+              cargoFromSkuLibrary:
+                $ref: '#/components/examples/CargoFromSkuLibrary'
+      responses:
+        '202':
+          description: Accepted. A new job is queued; a replay of an earlier submit carries the original job in the status it has now.
+          headers:
+            Location:
+              description: URL of the created job.
+              schema:
+                type: string
+                format: uri
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/JobAccepted'
+              examples:
+                queued:
+                  summary: Job accepted, nothing solved yet
+                  value:
+                    jobId: 01975cba-67b9-7b7c-a2f1-3d29e4a01c44
+                    status: queued
+        '400':
+          $ref: '#/components/responses/ValidationProblem'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          description: 'Either the account''s plan does not include customer-API access at all (`code: "customer_api_not_entitled"`), or it does not include the job''s `problemType`: `code: "mixed_palletizing_not_entitled"` for a `MixedPalletizing` job, `code: "load_planning_not_entitled"` for `LoadPlanning`. A carrier or cargo line referencing a company-library entry (a UUID `libraryId`) answers `code: "libraries_not_entitled"`, before any lookup, when that type of library is not available on the plan: a type is available when the plan includes company libraries and its own size limit is not 0. Distinct from the `422` below, which means the order itself is too big, not that the capability is missing; also distinct from the `429` quota, which means the capability is there but used up for the month.'
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+              examples:
+                notEntitled:
+                  $ref: '#/components/examples/NotEntitled'
+                mixedPalletizingNotEntitled:
+                  summary: The plan does not include mixed palletizing
+                  value:
+                    type: https://tools.ietf.org/html/rfc9110#section-15.5.4
+                    title: Forbidden
+                    status: 403
+                    code: mixed_palletizing_not_entitled
+                    detail: This problem type is not available on your plan.
+                librariesNotEntitled:
+                  summary: A carrier or cargo line references a company-library entry of a type the plan does not include
+                  value:
+                    type: https://tools.ietf.org/html/rfc9110#section-15.5.4
+                    title: Company libraries are not available on your plan.
+                    status: 403
+                    code: libraries_not_entitled
+                    detail: Your plan does not include company libraries.
+        '409':
+          $ref: '#/components/responses/IdempotencyConflict'
+        '413':
+          $ref: '#/components/responses/PayloadTooLarge'
+        '415':
+          $ref: '#/components/responses/UnsupportedMediaType'
+        '422':
+          $ref: '#/components/responses/EntitlementProblem'
+        '429':
+          $ref: '#/components/responses/TooManyActiveJobs'
+        '500':
+          $ref: '#/components/responses/ServerProblem'
   /jobs/validate:
     post:
-      operationId: validateJob
-      summary: Dry-run validation of a request without creating a job
       tags:
       - Jobs
+      operationId: validateJob
+      summary: Dry-run validation of a request without creating a job
+      description: 'Runs the same validation as `POST /jobs`, library references included, but creates no job, triggers no
+
+        solve, and runs no plan-limit, problem-type or quota check of its own. The one access check it shares with
+
+        `POST /jobs` is the company-library gate: a carrier or cargo line referencing a company-library entry (a
+
+        UUID `libraryId`) of a type the plan does not include answers `403 libraries_not_entitled` here too, before
+
+        any lookup. A body that validates here can still be rejected by `POST /jobs` with `403`/`422`/`429`. Every
+
+        validation failure comes back in the same code-bearing `problem+json` shape here as on `POST /jobs`.'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/JobRequest'
+            examples:
+              onePalletTwoBoxes:
+                $ref: '#/components/examples/OnePalletTwoBoxes'
+              mixedPalletsForOneStore:
+                $ref: '#/components/examples/MixedPalletsForOneStore'
+              cargoFromSkuLibrary:
+                $ref: '#/components/examples/CargoFromSkuLibrary'
+      responses:
+        '200':
+          description: Valid. `warnings` is reserved and always empty today.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ValidateResult'
+              examples:
+                valid:
+                  summary: The request validates
+                  value:
+                    valid: true
+                    warnings: []
+        '400':
+          $ref: '#/components/responses/ValidationProblem'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/LibrariesForbidden'
+        '413':
+          $ref: '#/components/responses/PayloadTooLarge'
+        '415':
+          $ref: '#/components/responses/UnsupportedMediaType'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+        '500':
+          $ref: '#/components/responses/ServerProblem'
+  /jobs/{id}:
+    parameters:
+    - $ref: '#/components/parameters/JobId'
+    get:
+      tags:
+      - Jobs
+      operationId: getJob
+      summary: Poll job status
+      description: The job's status and progress, for an order or a loading-instructions job alike. Poll it until `status` is `succeeded`, `failed` or `cancelled`; those three are final. After `succeeded`, fetch the result with `GET /jobs/{id}/result` (an order) or the PDFs with `GET /jobs/{id}/instructions` (an instructions job).
+      responses:
+        '200':
+          description: 'Current status. A job that fails during solving still answers `200` here: the failure is in the body (`status: "failed"`, `errorCategory`, `error`), not an HTTP error.'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/JobStatus'
+              examples:
+                running:
+                  summary: Mid-solve
+                  value:
+                    jobId: 01975cba-67b9-7b7c-a2f1-3d29e4a01c44
+                    status: running
+                    percentage: 50
+                    queuePosition: null
+                    errorCategory: null
+                    error: null
+                    name: null
+                    createdAt: '2026-08-19T08:12:33.412+00:00'
+                    problemType: LoadPlanning
+                    saved: false
+                succeeded:
+                  summary: Terminal, the result can be collected
+                  value:
+                    jobId: 01975cba-67b9-7b7c-a2f1-3d29e4a01c44
+                    status: succeeded
+                    percentage: 100
+                    queuePosition: null
+                    errorCategory: null
+                    error: null
+                    name: Rotterdam morning run
+                    createdAt: '2026-08-19T08:12:33.412+00:00'
+                    problemType: LoadPlanning
+                    saved: false
+                failed:
+                  summary: Terminal, and the failure is in the body rather than the status code
+                  value:
+                    jobId: 01975cbd-3a52-7e8f-8c14-6d0b9f3e7a52
+                    status: failed
+                    percentage: 50
+                    queuePosition: null
+                    errorCategory: solver_error
+                    error:
+                      code: solver_error
+                      message: The solve did not complete. Please retry.
+                    name: null
+                    createdAt: '2026-08-18T15:47:02.861+00:00'
+                    problemType: LoadPlanning
+                    saved: false
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFoundProblem'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+        '500':
+          $ref: '#/components/responses/ServerProblem'
+  /jobs/{id}/result:
+    parameters:
+    - $ref: '#/components/parameters/JobId'
+    get:
+      tags:
+      - Jobs
+      operationId: getJobResult
+      summary: Fetch the packing result (once succeeded)
+      description: 'The packing result of an order, once `GET /jobs/{id}` reports `succeeded`: each carrier with its placements and KPIs, the cargo that did not fit, and the totals, in the units the job was submitted in. Before that it answers `404 result_not_ready`.'
+      responses:
+        '200':
+          description: The packing result, in the units the job was submitted in.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/JobResult'
+              examples:
+                onePallet:
+                  summary: Both units of one cargo line on a single pallet
+                  value:
+                    jobId: 01975cba-67b9-7b7c-a2f1-3d29e4a01c44
+                    status: succeeded
+                    units:
+                      length: m
+                      weight: kg
+                      volume: m3
+                      area: m2
+                      ldm: m
+                    summary:
+                      carriersUsed: 1
+                      itemsPlaced: 2
+                      itemsUnplaced: 0
+                      totalWeight: 10.0
+                    carriers:
+                    - externalId: EUR-PALLET
+                      name: null
+                      instance: 1
+                      geometry:
+                        type: box
+                        dimensionX: 1.2
+                        dimensionY: 0.8
+                        dimensionZ: 1.5
+                        box:
+                          dimensionX: 1.2
+                          dimensionY: 0.8
+                          dimensionZ: 1.5
+                      kpis:
+                        volumeUtilization: 3.3
+                        loadedWeight: 10.0
+                        loadedVolume: 0.048
+                        itemCount: 2
+                      placements:
+                      - x: 0.0
+                        y: 0.0
+                        z: 0.0
+                        sizeX: 0.3
+                        sizeY: 0.4
+                        sizeZ: 0.2
+                        orientationRx: 0
+                        orientationRy: 0
+                        orientationRz: 0
+                        weight: 5.0
+                        geometry:
+                          type: box
+                          dimensionX: 0.3
+                          dimensionY: 0.4
+                          dimensionZ: 0.2
+                          box:
+                            dimensionX: 0.3
+                            dimensionY: 0.4
+                            dimensionZ: 0.2
+                        description: Box A
+                        color: null
+                        externalId: SKU-123
+                        category: box
+                        group: []
+                        groups: []
+                        itemId: 01975cba-6a1f-7c3d-9e04-5b71c8f2a613
+                        libraryId: null
+                      - x: 0.3
+                        y: 0.0
+                        z: 0.0
+                        sizeX: 0.4
+                        sizeY: 0.3
+                        sizeZ: 0.2
+                        orientationRx: 0
+                        orientationRy: 0
+                        orientationRz: 90
+                        weight: 5.0
+                        geometry:
+                          type: box
+                          dimensionX: 0.3
+                          dimensionY: 0.4
+                          dimensionZ: 0.2
+                          box:
+                            dimensionX: 0.3
+                            dimensionY: 0.4
+                            dimensionZ: 0.2
+                        description: Box A
+                        color: null
+                        externalId: SKU-123
+                        category: box
+                        group: []
+                        groups: []
+                        itemId: 01975cba-6a1f-7c3d-9e04-5b71c8f2a613
+                        libraryId: null
+                      category: container
+                      libraryId: null
+                    unplacedItems: []
+                    name: Rotterdam morning run
+                    createdAt: '2026-08-19T08:12:33.412+00:00'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          description: 'The job exists but has not succeeded yet (`code: "result_not_ready"`), or the id is unknown or belongs to another account (`code: "job_not_found"`), both answer identically, on purpose.'
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+              examples:
+                notReadyYet:
+                  summary: The job exists but has not succeeded
+                  value:
+                    type: https://tools.ietf.org/html/rfc9110#section-15.5.5
+                    title: Result not ready.
+                    status: 404
+                    code: result_not_ready
+                unknownJob:
+                  $ref: '#/components/examples/JobNotFound'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+        '500':
+          $ref: '#/components/responses/ServerProblem'
+  /jobs/{id}/input:
+    parameters:
+    - $ref: '#/components/parameters/JobId'
+    get:
+      tags:
+      - Jobs
+      operationId: getJobInput
+      summary: Fetch the request of an order, with library references resolved
+      description: 'The request of this order, with every library reference resolved to the values the solver used: the `JobRequest` shape under `request`, with any name trimmed and members the API does not know left out. Every line comes back inline. A carrier or cargo line that referenced a library entry carries the entry''s definition as frozen into the job at submit: the sizes and weights the solver used, overrides included, in the job''s units, and on a cargo line the effective `constraints`. A carrier with no label on the line or the entry comes back with the entry''s id as its `externalId`, because an inline carrier needs one; `/result` shows `null` for it. `sources` lists each entry with the `revision` used and the `lines` of `request` it resolved. Enum values come back in the spelling listed here, whatever case you sent them in. A `direction` on `CenterLoadMass`, which the API ignores, is left out. A cargo line whose stored category the closed set does not know (a job from before that set was closed) reads back as `box`. Use it for what the result does not repeat: the size and rules of a cargo line that was not placed, or the carriers you asked for. A later rename changes the job''s `name`, not this request, and a later change to a library entry changes neither this request nor its `sources`. `resolvedAt` is the order''s `createdAt`. Orders only, in any status.'
+      responses:
+        '200':
+          description: The request, every line inline.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/JobInput'
+              examples:
+                onePalletTwoBoxes:
+                  summary: The request of the "one pallet type, two units" order
+                  value:
+                    resolvedAt: '2026-08-19T08:12:33.412+00:00'
+                    request:
+                      units:
+                        length: m
+                        weight: kg
+                      carriers:
+                      - externalId: EUR-PALLET
+                        geometry:
+                          type: box
+                          dimensionX: 1.2
+                          dimensionY: 0.8
+                          dimensionZ: 1.5
+                      cargo:
+                      - externalId: SKU-123
+                        description: Box A
+                        amount: 2
+                        weight: 5.0
+                        geometry:
+                          type: box
+                          dimensionX: 0.3
+                          dimensionY: 0.4
+                          dimensionZ: 0.2
+                    sources: []
+                skuReferences:
+                  summary: 'The request of the order that referenced SKUs: every line inline, `sources` naming the SKU and the lines it resolved'
+                  value:
+                    resolvedAt: '2026-09-30T10:02:11.508+00:00'
+                    request:
+                      units:
+                        length: m
+                        weight: kg
+                      carriers:
+                      - externalId: TRAILER
+                        geometry:
+                          type: box
+                          dimensionX: 13.6
+                          dimensionY: 2.48
+                          dimensionZ: 2.7
+                      cargo:
+                      - externalId: SKU-4711
+                        description: Carton 60x40
+                        color: '#3366cc'
+                        amount: 24
+                        geometry:
+                          type: box
+                          dimensionX: 0.6
+                          dimensionY: 0.4
+                          dimensionZ: 0.4
+                        weight: 18
+                        category: box
+                        constraints:
+                          allowStackingOnTop: true
+                          allowedRotations:
+                          - Z
+                        groups:
+                        - store-104
+                      - externalId: SKU-4711
+                        description: Carton 60x40, this side up
+                        amount: 6
+                        geometry:
+                          type: box
+                          dimensionX: 0.6
+                          dimensionY: 0.4
+                          dimensionZ: 0.4
+                        weight: 18
+                        category: box
+                        constraints:
+                          allowStackingOnTop: true
+                          allowedRotations: []
+                      - externalId: SPOT-ITEM
+                        description: Loose crate
+                        amount: 2
+                        weight: 30
+                        geometry:
+                          type: box
+                          dimensionX: 0.8
+                          dimensionY: 0.6
+                          dimensionZ: 0.5
+                    sources:
+                    - libraryId: 0197d1e4-2a6b-7f3c-8d15-4b9e0c7a2f68
+                      revision: 1
+                      lines:
+                      - /cargo/0
+                      - /cargo/1
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          description: 'The id is unknown, another account''s, or a loading-instructions job (`code: "job_not_found"`).'
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+              examples:
+                unknownJob:
+                  $ref: '#/components/examples/JobNotFound'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+        '500':
+          $ref: '#/components/responses/ServerProblem'
+  /jobs/{id}/name:
+    parameters:
+    - $ref: '#/components/parameters/JobId'
+    put:
+      tags:
+      - Jobs
+      operationId: setJobName
+      summary: Set, change or clear a job's name
+      description: Replaces the job's optional label. Send `null`, or omit the key entirely, to clear it; there is no `DELETE`. Works in any job status, including a terminal one, and on a loading-instructions job as well as on an order.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                name:
+                  type:
+                  - string
+                  - 'null'
+                  maxLength: 256
+                  description: The new label. `null`, an absent key (a body of `{}`), or a value that is only whitespace all clear the name; anything else is trimmed and stored.
+            examples:
+              set:
+                summary: Give the job a label
+                value:
+                  name: Rotterdam morning run
+              clear:
+                summary: Remove the label again
+                value:
+                  name: null
+      responses:
+        '200':
+          description: The name now stored on the job, after trimming.
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                - jobId
+                - name
+                properties:
+                  jobId:
+                    type: string
+                    format: uuid
+                  name:
+                    type:
+                    - string
+                    - 'null'
+              examples:
+                set:
+                  summary: The label as stored
+                  value:
+                    jobId: 01975cba-67b9-7b7c-a2f1-3d29e4a01c44
+                    name: Rotterdam morning run
+        '400':
+          $ref: '#/components/responses/ValidationProblem'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFoundProblem'
+        '413':
+          $ref: '#/components/responses/PayloadTooLarge'
+        '415':
+          $ref: '#/components/responses/UnsupportedMediaType'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+        '500':
+          $ref: '#/components/responses/ServerProblem'
+  /jobs/{id}/cancel:
+    parameters:
+    - $ref: '#/components/parameters/JobId'
+    post:
+      tags:
+      - Jobs
+      operationId: cancelJob
+      summary: Cancel a job (cooperative)
+      description: A queued job is finalized to `cancelled` immediately. A running job only gets a cooperative cancel flag (the job winds down at its next checkpoint), so poll the status rather than assuming the job is already dead on `202`.
+      responses:
+        '202':
+          description: Cancel accepted (job was queued or running). Empty body.
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFoundProblem'
+        '409':
+          description: 'Job already reached a terminal state; nothing to cancel (`code: "job_already_terminal"`).'
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+              examples:
+                alreadyTerminal:
+                  summary: The job already finished, failed or was cancelled
+                  value:
+                    type: https://tools.ietf.org/html/rfc9110#section-15.5.10
+                    title: Job already finished.
+                    status: 409
+                    code: job_already_terminal
+        '429':
+          $ref: '#/components/responses/RateLimited'
+        '500':
+          $ref: '#/components/responses/ServerProblem'
+  /jobs/{id}/instructions:
+    parameters:
+    - $ref: '#/components/parameters/JobId'
+    post:
+      tags:
+      - Jobs
+      operationId: createInstructions
+      summary: Generate step-by-step loading-instruction PDFs
+      description: Creates a *derived* job that renders one loading-instruction PDF per packed carrier instance of the source job, which must have already succeeded. Poll the returned (new) job id with `GET /jobs/{id}` until it has succeeded, then download each carrier's PDF via `GET /jobs/{id}/instructions?carrier={n}` with that same new id.
+      responses:
+        '202':
+          description: Accepted. The instructions job is queued.
+          headers:
+            Location:
+              description: 'URL of the instructions job this call created: poll it with `GET /jobs/{id}`.'
+              schema:
+                type: string
+                format: uri
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/JobAccepted'
+              examples:
+                queued:
+                  summary: A derived job, with its own id
+                  value:
+                    jobId: 01975e02-7c7c-7000-8000-00000000abcd
+                    status: queued
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          description: 'Either the account''s plan does not include customer-API access (`code: "customer_api_not_entitled"`), or the request carried a body and this operation accepts none (`code: "request_body_not_supported"`). Send it without a body.'
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+              examples:
+                bodyNotSupported:
+                  $ref: '#/components/examples/BodyNotSupported'
+                notEntitled:
+                  $ref: '#/components/examples/NotEntitled'
+        '404':
+          $ref: '#/components/responses/NotFoundProblem'
+        '409':
+          description: 'Source job has not succeeded; nothing to render (`code: "job_not_succeeded"`).'
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+              examples:
+                sourceNotSucceeded:
+                  summary: Nothing to render yet
+                  value:
+                    type: https://tools.ietf.org/html/rfc9110#section-15.5.10
+                    title: Source job has not succeeded.
+                    status: 409
+                    code: job_not_succeeded
+        '429':
+          $ref: '#/components/responses/RateLimited'
+        '500':
+          $ref: '#/components/responses/ServerProblem'
+    get:
+      tags:
+      - Jobs
+      operationId: downloadInstructions
+      summary: Download one carrier's loading-instruction PDF
+      description: 'Here `{id}` is the *instructions* job id returned by `POST /jobs/{id}/instructions`, not the source job: any other id, the source order''s included, answers `404 job_not_found`. Download once the instructions job has succeeded. One PDF per packed carrier; there is no ZIP bundling every carrier. `carrier` selects which one.'
+      parameters:
+      - name: carrier
+        in: query
+        description: 'The 1-based position of the carrier in the source job result''s `carriers[]` array, NOT the carrier''s `instance` number, which restarts at 1 per carrier type. Omit for the first carrier. A value that is not a whole number of 1 or greater is rejected with `400` (`code: "validation_failed"`, `pointer: "carrier"`); a positive index whose PDF does not exist answers `404` `artifact_not_ready`, the same as one that has not finished rendering; once the instructions job has succeeded, that answer is final.'
+        schema:
+          type: integer
+          format: int32
+          minimum: 1
+          maximum: 2147483647
+      responses:
+        '200':
+          description: One carrier's loading-instruction PDF.
+          content:
+            application/pdf:
+              schema:
+                type: string
+                format: binary
+        '400':
+          $ref: '#/components/responses/ValidationProblem'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          description: 'Either `artifact_not_ready`: the instructions job is yours but this PDF is not available. While the job is queued or running, poll `GET /jobs/{id}` until it succeeds; once it has succeeded the answer is final (no PDF at that position, or swept by retention), so request instructions again. Or `job_not_found`: the id is unknown, another account''s, or not an instructions job (for example the source order''s id). There is no `410` for a retention-swept artifact.'
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+              examples:
+                artifactNotReady:
+                  summary: Not rendered yet (poll the job), or not there at all once the job has succeeded
+                  value:
+                    type: https://tools.ietf.org/html/rfc9110#section-15.5.5
+                    title: Instructions are not ready.
+                    status: 404
+                    code: artifact_not_ready
+        '429':
+          $ref: '#/components/responses/RateLimited'
+        '500':
+          $ref: '#/components/responses/ServerProblem'
+  /jobs/{id}/share:
+    parameters:
+    - $ref: '#/components/parameters/JobId'
+    post:
+      tags:
+      - Jobs
+      operationId: createShareLink
+      summary: Create a read-only shareable link to the 3D viewer
+      description: 'Mints a **capability link** to the read-only 3D viewer, on a job that has already succeeded. The link
+
+        you hand out is the response''s **`url`**: it opens the viewer in a browser and needs no API key, so
+
+        you can send it to people who aren''t users. It exposes only this job''s visual result; it does not
+
+        expose the job id, the input, other jobs, or any account data, and it can''t call the API.
+
+
+        The `shareId` is the opaque, unguessable token the link carries (NOT the job id). Re-sharing rotates
+
+        it: there is only ever one active link per job, and the previous one stops working immediately.
+
+        Revoke with `DELETE`; the link also honours `expiresAt`.'
+      responses:
+        '201':
+          description: Share link created. Hand out its `url`.
+          headers:
+            Location:
+              description: 'Not a URL to hand out and not part of this API: requesting it answers `401`. Share `url` instead.'
+              schema:
+                type: string
+                format: uri
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ShareLink'
+              examples:
+                created:
+                  summary: Link minted, hand out the `url`
+                  value:
+                    shareId: YzIzaeQtWUysVuPJToFCCHvXpQKZx1ftQAjgFcAuqDI
+                    url: https://viewer.loadoptimizer.ai/YzIzaeQtWUysVuPJToFCCHvXpQKZx1ftQAjgFcAuqDI
+                    expiresAt: '2027-03-01T12:00:00+00:00'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          description: 'Either the account''s plan does not include customer-API access (`code: "customer_api_not_entitled"`), or it does not include link sharing (`code: "link_sharing_not_entitled"`; checked before the job lookup, so a job id that isn''t yours never leaks through this path either), or the request carried a body and this operation accepts none (`code: "request_body_not_supported"`). Send it without a body. The entitlement is checked first, so a caller without link sharing that also sends a body hears `link_sharing_not_entitled`. Revoking is never gated: only minting a new link is a paid feature.'
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+              examples:
+                bodyNotSupported:
+                  $ref: '#/components/examples/BodyNotSupported'
+                notEntitled:
+                  $ref: '#/components/examples/NotEntitled'
+                linkSharingNotEntitled:
+                  summary: The plan does not include link sharing
+                  value:
+                    type: https://tools.ietf.org/html/rfc9110#section-15.5.4
+                    title: Share links are not included in your plan.
+                    status: 403
+                    code: link_sharing_not_entitled
+        '404':
+          $ref: '#/components/responses/NotFoundProblem'
+        '409':
+          description: 'Job has not succeeded; nothing to share (`code: "job_not_succeeded"`).'
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+              examples:
+                jobNotSucceeded:
+                  summary: Nothing to share yet
+                  value:
+                    type: https://tools.ietf.org/html/rfc9110#section-15.5.10
+                    title: Job has not succeeded.
+                    status: 409
+                    code: job_not_succeeded
+        '429':
+          $ref: '#/components/responses/RateLimited'
+        '500':
+          $ref: '#/components/responses/ServerProblem'
+    delete:
+      tags:
+      - Jobs
+      operationId: revokeShareLink
+      summary: Revoke the shareable link
+      description: Idempotent. A job with no active link still answers `204`.
+      responses:
+        '204':
+          description: Revoked (or there was nothing to revoke).
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFoundProblem'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+        '500':
+          $ref: '#/components/responses/ServerProblem'
+components:
+  schemas:
+    ProblemCode:
+      type: string
+      description: Stable, machine-readable top-level error-code registry, by HTTP status.
+      enum:
+      - validation_failed
+      - ambiguous_source
+      - override_field_not_allowed
+      - customer_api_not_entitled
+      - mixed_palletizing_not_entitled
+      - load_planning_not_entitled
+      - link_sharing_not_entitled
+      - request_body_not_supported
+      - libraries_not_entitled
+      - library_read_only
+      - internal_server_error
+      - job_not_found
+      - result_not_ready
+      - artifact_not_ready
+      - saved_load_not_found
+      - library_not_found
+      - library_entry_not_found
+      - job_already_terminal
+      - job_not_succeeded
+      - saved_load_exists
+      - external_id_taken
+      - payload_too_large
+      - unsupported_media_type
+      - max_items_per_job
+      - max_carriers_per_job
+      - max_carrier_instances_per_job
+      - max_saved_loads
+      - max_library_entries
+      - too_many_active_jobs
+      - monthly_quota_exceeded
+      - rate_limit_exceeded
+    CarrierEntry:
+      type: object
+      description: 'A carrier offered for this job, in one of two forms: an inline definition (`geometry` plus the other type-level fields), or a reference to one of your library entries (`libraryId`). Never both: the presence of `libraryId` is the switch, and a reference that also sends `geometry`, `name`, `category` or `tareWeight` is rejected with `400`, field code `ambiguous_source`. `overrides` is reference-only the same way: an inline carrier that sends it is rejected with `400` against `/carriers/{i}/overrides`. A property sent as `null` counts as absent, so `libraryId: null` on an inline carrier is fine. Carriers never nest.'
+      oneOf:
+      - title: Inline
+        required:
+        - externalId
+        - geometry
+        properties:
+          externalId:
+            type: string
+            maxLength: 128
+          geometry:
+            type: object
+        not:
+          anyOf:
+          - required:
+            - libraryId
+            properties:
+              libraryId:
+                type: string
+                maxLength: 64
+          - required:
+            - overrides
+            properties:
+              overrides:
+                type: object
+      - title: Reference
+        required:
+        - libraryId
+        properties:
+          libraryId:
+            type: string
+            maxLength: 64
+        not:
+          anyOf:
+          - required:
+            - geometry
+            properties:
+              geometry:
+                type: object
+          - required:
+            - name
+            properties:
+              name:
+                type: string
+                maxLength: 256
+          - required:
+            - category
+            properties:
+              category:
+                type: string
+                enum:
+                - container
+                - pallet
+                - truck
+                - trailer
+          - required:
+            - tareWeight
+            properties:
+              tareWeight:
+                type: number
+      properties:
+        libraryId:
+          type:
+          - string
+          - 'null'
+          maxLength: 64
+          description: 'Reference form: the id of one of your library entries (any UUID notation), or a system catalogue slug such as `carrier_iso_40hc`, which needs no company-library entitlement: any plan that can use the customer API can reference it, and `libraries_not_entitled` never applies to a slug. The definition comes from the entry, in the entry''s own units, and is frozen into the job at submit: deleting the entry later changes nothing here. An id you cannot use is rejected with `400`, field code `library_entry_not_found`, one error per such carrier.'
+        externalId:
+          type:
+          - string
+          - 'null'
+          minLength: 1
+          maxLength: 128
+          description: 'Customer label for this carrier type, echoed on the result. Duplicates across carriers are allowed. Required and non-empty on an inline carrier: a missing, null or empty value is rejected with 400. Optional on a reference, which inherits the entry''s label.'
+        name:
+          type:
+          - string
+          - 'null'
+          maxLength: 256
+          description: Inline only. Optional display label. Carriers have no description field.
+        geometry:
+          anyOf:
+          - $ref: '#/components/schemas/Box'
+          - type: 'null'
+        quantity:
+          type:
+          - integer
+          - 'null'
+          format: int32
+          minimum: 1
+          maximum: 2147483647
+          description: 'How many instances are available. null/omitted = unlimited: the solver adds instances until the cargo runs out or the carrier fits nothing more, and only the carriers it used come back. An explicit N is used in full: all N instances appear in the result''s carriers[], so an instance past the point where the cargo ran out comes back with an empty placements[]. summary.carriersUsed counts only carriers with at least one placement.'
+        tareWeight:
+          type:
+          - number
+          - 'null'
+          minimum: 0
+          description: 'Inline only. Optional. The carrier''s own empty weight, in units.weight, stored with the job. At most 100000 kg after conversion from units.weight (so 100000 in kg, 100 in t, 220462 in lb); a value past it is rejected with 400 against this field. Per-carrier weight on the result is `kpis.loadedWeight`: the summed weight of that carrier''s placements.'
+        category:
+          type:
+          - string
+          - 'null'
+          enum:
+          - container
+          - pallet
+          - truck
+          - trailer
+          - null
+          description: 'Inline only. Optional. Which kind of carrier this entry is. A value outside this list is rejected with 400 against this field. Omit it and the kind implied by problemType is filled in (pallet for MixedPalletizing, container for LoadPlanning) and echoed, so a result names the kind it was planned and drawn as. A MixedPalletizing job accepts only `pallet`: `container`, `truck` and `trailer` are rejected with 400 against this field. LoadPlanning accepts any of the four. A reference takes its category from the entry, and a MixedPalletizing job rejects a referenced entry that is not a pallet, against `/carriers/{i}/libraryId`.'
+        overrides:
+          anyOf:
+          - $ref: '#/components/schemas/CarrierOverrides'
+          - type: 'null'
+          description: Reference form only. Optional per-job adjustment of the referenced entry. An inline carrier that sends it is rejected with `400` against this field.
+    SecondaryObjective:
+      type: object
+      description: An optional switch on top of the primary objective, at most one of each `type`.
+      required:
+      - type
+      properties:
+        type:
+          type: string
+          enum:
+          - CenterLoadMass
+          - consolidation
+          description: CenterLoadMass centres the load's mass after solving; consolidation picks the axis the solver packs along from the first step.
+        direction:
+          anyOf:
+          - $ref: '#/components/schemas/ConsolidationDirection'
+          - type: 'null'
+          description: Required when type is consolidation; accepted and ignored alongside CenterLoadMass.
+    ItemOverrides:
+      type: object
+      additionalProperties: false
+      description: 'Per-job adjustments of a referenced SKU, applied per field: a member sent replaces the SKU''s value, a member left out keeps it. Any other member is rejected with `override_field_not_allowed`, against `/cargo/{i}/overrides/<member>`, the member spelled exactly as you sent it (`~` written as `~0`, `/` as `~1`).'
+      properties:
+        constraints:
+          anyOf:
+          - $ref: '#/components/schemas/ItemConstraints'
+          - type: 'null'
+          description: 'Per field, for this job only: `allowStackingOnTop` or `allowedRotations` sent replaces the SKU''s value, and a member left out (or `null`) keeps the SKU''s. The defaults of `ItemConstraints` do not apply here. `allowedRotations: []` locks the unit in the orientation its geometry describes, whatever the SKU allows.'
+    Placement:
+      type: object
+      required:
+      - x
+      - y
+      - z
+      - sizeX
+      - sizeY
+      - sizeZ
+      - orientationRx
+      - orientationRy
+      - orientationRz
+      - weight
+      - geometry
+      - group
+      - groups
+      - itemId
+      - libraryId
+      description: A positioned unit in its carrier's frame. `x,y,z` is the min corner of the placed box's rotated bounding box; `sizeX/Y/Z` are that box's rotated extents; the rotation is already applied.
+      properties:
+        x:
+          type: number
+        y:
+          type: number
+        z:
+          type: number
+        sizeX:
+          type: number
+          description: Rotated bounding footprint, X.
+        sizeY:
+          type: number
+        sizeZ:
+          type: number
+        orientationRx:
+          type: number
+          description: Rotation in degrees, always a multiple of 90.
+        orientationRy:
+          type: number
+        orientationRz:
+          type: number
+        weight:
+          type: number
+          description: This placement's weight, in units.weight.
+        geometry:
+          $ref: '#/components/schemas/Geometry'
+          description: Original, unrotated dimensions.
+        description:
+          type:
+          - string
+          - 'null'
+          description: Echo.
+        color:
+          type:
+          - string
+          - 'null'
+          description: Echo.
+        externalId:
+          type:
+          - string
+          - 'null'
+          description: Echo, not unique.
+        category:
+          type:
+          - string
+          - 'null'
+          enum:
+          - box
+          - null
+          description: Echo of the cargo line's category. The set may grow; tolerate values you do not know. Results of jobs submitted before the release that closed this set (see the changelog) can carry `null` or free text; treat a value you do not know as `box`.
+        group:
+          type: array
+          deprecated: true
+          items:
+            type: string
+          description: 'Deprecated: the same labels as groups. Removed in the next major version.'
+        groups:
+          type: array
+          items:
+            type: string
+          description: Echo of the source cargo line's groups[], under the same name as on the request.
+        itemId:
+          type: string
+          format: uuid
+          description: Join key the API assigns to the source cargo line. Shared by every placement of the same line, the only reliable way to attribute a placement to a submitted line; do not join on externalId.
+        libraryId:
+          type:
+          - string
+          - 'null'
+          format: uuid
+          description: The SKU the cargo line referenced; null for an inline line.
+    ItemEntry:
+      type: object
+      description: 'A cargo line, in one of two forms: an inline definition (`geometry` and `weight`, optionally `category` and `constraints`), or a reference to a SKU in your company SKU library (`libraryId`). Never both: the presence of `libraryId` is the switch, and a reference that also sends `geometry`, `weight`, `category` or `constraints` is rejected with `400`, field code `ambiguous_source`, against `/cargo/{i}/libraryId`. `overrides` is reference-only the same way: an inline line that sends it is rejected with `400` against `/cargo/{i}/overrides`. A property sent as `null` counts as absent, so `libraryId: null` on an inline line is fine. Both forms take `amount`, `groups`, `color`, the `description` label and `externalId`, and plan limits count a reference exactly like an inline line.'
+      oneOf:
+      - title: Inline
+        required:
+        - amount
+        - geometry
+        - weight
+        properties:
+          geometry:
+            type: object
+          weight:
+            type: number
+        not:
+          anyOf:
+          - required:
+            - libraryId
+            properties:
+              libraryId:
+                type: string
+                maxLength: 64
+          - required:
+            - overrides
+            properties:
+              overrides:
+                type: object
+      - title: Reference
+        required:
+        - libraryId
+        - amount
+        properties:
+          libraryId:
+            type: string
+            maxLength: 64
+        not:
+          anyOf:
+          - required:
+            - geometry
+            properties:
+              geometry:
+                type: object
+          - required:
+            - weight
+            properties:
+              weight:
+                type: number
+          - required:
+            - category
+            properties:
+              category:
+                type: string
+                maxLength: 64
+          - required:
+            - constraints
+            properties:
+              constraints:
+                type: object
+      properties:
+        libraryId:
+          type:
+          - string
+          - 'null'
+          maxLength: 64
+          description: 'Reference form: the id of a SKU in your company SKU library (any UUID notation). The SKU''s geometry, weight, category and constraints, in the SKU''s own units, are frozen into the job at submit: a later PUT or DELETE of the SKU changes nothing here. An id that names no SKU you can use (unknown, deleted, another account''s, malformed, or a slug: there is no system SKU catalogue) is rejected with `400`, field code `library_entry_not_found`, against `/cargo/{i}/libraryId`, one error per such line. When the SKU library is not available on your plan, a UUID here answers `403 libraries_not_entitled` before any lookup.'
+        externalId:
+          type:
+          - string
+          - 'null'
+          maxLength: 128
+          description: Optional echo label. Not unique and not a join key; use the result placement's itemId to join back to this line. On a reference it falls back to the SKU's externalId, and must be non-empty when sent.
+        description:
+          type:
+          - string
+          - 'null'
+          maxLength: 512
+          description: Human label, echoed on result placements and unplaced entries. Cargo has no name field; use this instead. On a reference it falls back to the SKU's name, and must be non-empty when sent.
+        color:
+          type:
+          - string
+          - 'null'
+          maxLength: 64
+          description: Display colour, free-form (e.g. a hex string), echoed on result placements.
+        amount:
+          type: integer
+          format: int32
+          minimum: 1
+          maximum: 2147483647
+          description: How many identical units this line represents.
+        geometry:
+          anyOf:
+          - $ref: '#/components/schemas/CargoGeometry'
+          - type: 'null'
+        weight:
+          type:
+          - number
+          - 'null'
+          minimum: 0
+          description: Inline only. Per-unit weight, in units.weight. At most 100000 kg after conversion from units.weight (so 100000 in kg, 100 in t, 220462 in lb); a value past it is rejected with 400 against this field.
+        constraints:
+          anyOf:
+          - $ref: '#/components/schemas/ItemConstraints'
+          - type: 'null'
+        category:
+          type:
+          - string
+          - 'null'
+          enum:
+          - box
+          - null
+          description: 'Inline only. Optional. The kind the unit is drawn as: `box`, matched in any case and echoed in that spelling. Any other value is rejected with 400 against this field. Omit it and `box` is filled in and echoed. A reference takes the SKU''s. Unrelated to a carrier''s category, which is a closed set of four values (`container`, `pallet`, `truck`, `trailer`) that decides the shape drawn around the cargo. The set may grow.'
+        overrides:
+          anyOf:
+          - $ref: '#/components/schemas/ItemOverrides'
+          - type: 'null'
+          description: Reference form only. Optional per-job adjustment of the referenced SKU. An inline line that sends it is rejected with `400` against this field.
+        groups:
+          type:
+          - array
+          - 'null'
+          maxItems: 10
+          items:
+            type: string
+            maxLength: 256
+          description: 'Free labels, at most 10 of them. A label affects placement only when the job also declares it in the top-level `groups` block and sets `configuration.groupSeparation`, in which case that group''s cargo is packed into its own contiguous section of the carrier; every other label on the line stays inert. While `configuration.groupSeparation` is set, a line may name at most one declared group: naming two asks for one unit in two sections and is rejected with 400 against `/cargo/{i}/groups`, so split the line''s `amount` across one cargo line per group instead. A line that names no declared group joins the single section that follows all of them. Echoed back as groups on placements and unplaced entries either way (and under the deprecated name group). A null entry is rejected with 400 against `/cargo/{i}/groups`. A label is at most 256 characters; a longer one is rejected with 400 against `/cargo/{i}/groups/{j}`.'
+    ResultSummary:
+      type: object
+      description: Overall totals across all carriers.
+      required:
+      - carriersUsed
+      - itemsPlaced
+      - itemsUnplaced
+      - totalWeight
+      properties:
+        carriersUsed:
+          type: integer
+          format: int32
+          description: Carriers with at least one placement.
+        itemsPlaced:
+          type: integer
+          format: int32
+          description: Total placement count (expanded units, not lines).
+        itemsUnplaced:
+          type: integer
+          format: int32
+          description: Sum of unplaced amounts across all lines (units, not lines).
+        totalWeight:
+          type: number
+          description: Total placed weight across all carriers, in units.weight.
+    Problem:
+      type: object
+      description: 'RFC 9457 `problem+json`. `code` is stable & machine-readable when present; `errors[].pointer` locates
+
+        the offending field, query parameter or header. Two `/v2` errors have an **empty body** instead:
+
+        `401` and the idempotency `409`.
+
+        See [Errors & troubleshooting](errors.html).'
+      properties:
+        type:
+          type: string
+          format: uri
+          description: 'A reference for the response''s status code, not for the specific failure: two failures with different `code` values share one `type`. RFC 9457 permits `about:blank` here; this API never sends that, and the `429` responses carry no `type` at all. Switch on `code`, never on this field.'
+        title:
+          type: string
+        status:
+          type: integer
+          format: int32
+        detail:
+          type: string
+          description: Human-readable explanation, present on some errors and often naming the limit value that was exceeded. Never switch on it; switch on code.
+        code:
+          $ref: '#/components/schemas/ProblemCode'
+        errors:
+          type: array
+          description: Field-level problems. Only on a 400 `validation_failed`.
+          items:
+            type: object
+            properties:
+              pointer:
+                type: string
+                description: For a body field, a JSON Pointer (RFC 6901) into the request body, over the member names as this contract spells them (camelCase, also when you sent another case), e.g. /carriers/0/externalId. A name you chose yourself (a group name, an overrides member) appears as sent, with ~ written as ~0 and / as ~1. For a query parameter or a header, its name without a leading /, e.g. limit or Idempotency-Key. An empty string means the body as a whole.
+              code:
+                type: string
+                enum:
+                - validation_failed
+                - ambiguous_source
+                - library_entry_not_found
+                - override_field_not_allowed
+                description: 'validation_failed, unless a field code applies: ambiguous_source or library_entry_not_found on the libraryId of a job carrier or cargo line, or override_field_not_allowed on its overrides.'
+              message:
+                type: string
+      required:
+      - title
+      - status
+    ConsolidationDirection:
+      type: string
+      enum:
+      - -X
+      - -Y
+      - Z
+      description: 'The packing axis to consolidate toward. Only these three values are supported: the solver fills outward from the carrier frame''s zero position and cannot gather toward the opposite end, so +X/+Y are rejected with 400. Omitting consolidation is not "no consolidation": the solver always packs along an axis, defaulting to -X.'
+    GroupSeparation:
+      type: object
+      required:
+      - mode
+      description: 'How strictly the declared groups are kept apart. Setting this object is what activates group separation; omitting it, or sending null, means no separation at all, which is what every request that does not mention groups is doing. There is no default value, unlike `objective`: a solve always has an objective, but it does not always separate groups.'
+      properties:
+        mode:
+          type: string
+          enum:
+          - segmented
+          description: 'Required whenever the object is present; there is no default, because the only discipline available is also the most expensive one in space and choosing it for you could cost you a carrier. `segmented` gives each declared group its own contiguous section of the carrier along the packing axis, in `packingOrder` order, with no interleaving: within one carrier a later section is never placed in front of an earlier one. Cargo that matches no declared group shares a single section that follows every declared one. Across carriers, a declared group stays on one carrier by default: when it does not fit entirely, the carrier closes at that group and the group continues, whole, on the next one (see `GroupSettings.keepTogether`). A group is split only when its `keepTogether` is false or when no entry in `carriers[]` has an empty carrier that takes it whole. A group with `keepTogether: false` can then have its remainder land on a carrier after one that already holds the group behind it. Packing a group can also leave less usable room than its volume suggests, and a carrier that closes early leaves the room behind the cut empty, so a separated job may need more carriers than the same cargo would without it. Cannot be combined with a `Z` consolidation direction: a section is a slice of the carrier taken along the packing axis, and sliced vertically every section above the first would start at the highest point of the one below it with its cargo hanging over empty space. That pair is rejected with 400.'
+    JobResult:
+      type: object
+      required:
+      - jobId
+      - status
+      - summary
+      - carriers
+      - unplacedItems
+      - units
+      - createdAt
+      description: Result of a succeeded job.
+      properties:
+        jobId:
+          type: string
+          format: uuid
+        status:
+          type: string
+          enum:
+          - succeeded
+        units:
+          $ref: '#/components/schemas/Units'
+        summary:
+          $ref: '#/components/schemas/ResultSummary'
+        carriers:
+          type: array
+          description: Every carrier of the plan, in the order the carriers were loaded.
+          items:
+            $ref: '#/components/schemas/PackedCarrier'
+        unplacedItems:
+          type: array
+          items:
+            $ref: '#/components/schemas/UnplacedItem'
+        name:
+          type:
+          - string
+          - 'null'
+          maxLength: 256
+          description: The label given at submit or set with PUT /jobs/{id}/name; null when the job has none.
+        createdAt:
+          type: string
+          format: date-time
+          description: When the job was submitted (UTC).
+    Geometry:
+      type: object
+      required:
+      - type
+      - dimensionX
+      - dimensionY
+      - dimensionZ
+      - box
+      description: 'Original (unrotated) box dimensions, echoed on a result carrier or placement in the same shape as the request `Box`: `type` and `dimensionX/Y/Z`, in units.length. A placement''s sizeX/Y/Z is this box''s rotated extent. `box` repeats the dimensions in the earlier nested form; it is deprecated and will be removed in the next major version, so read `dimensionX/Y/Z`.'
+      properties:
+        type:
+          const: box
+        dimensionX:
+          type: number
+          exclusiveMinimum: 0
+        dimensionY:
+          type: number
+          exclusiveMinimum: 0
+        dimensionZ:
+          type: number
+          exclusiveMinimum: 0
+        box:
+          type: object
+          deprecated: true
+          required:
+          - dimensionX
+          - dimensionY
+          - dimensionZ
+          description: 'Deprecated: the same dimensions as dimensionX/Y/Z. Removed in the next major version.'
+          properties:
+            dimensionX:
+              type: number
+              exclusiveMinimum: 0
+            dimensionY:
+              type: number
+              exclusiveMinimum: 0
+            dimensionZ:
+              type: number
+              exclusiveMinimum: 0
+    ItemConstraints:
+      type: object
+      description: Per-cargo-line behavioural rules, on an inline cargo line and on a SKU. Carriers have no constraints field in this API; only a cargo entry carries one. `geometry.type` and the fields of `constraints` may grow; tolerate values and fields you do not know.
+      properties:
+        allowStackingOnTop:
+          type:
+          - boolean
+          - 'null'
+          default: false
+          description: Whether other cargo may be placed directly on top of this line.
+        allowedRotations:
+          type:
+          - array
+          - 'null'
+          items:
+            type: string
+            enum:
+            - X
+            - Y
+            - Z
+          uniqueItems: true
+          maxItems: 3
+          default:
+          - Z
+          description: 'Axes the box may be turned 90° about, relative to the submitted orientation. This is the only rotation control; there is no tilt switch. Omitted → upright, free to spin about Z (equivalent to ["Z"]); [] explicitly locks the box in the submitted orientation with no rotation at all. Each axis at most once: naming one twice is rejected with 400 against this field.'
+    CarrierKpis:
+      type: object
+      description: 'Key figures of one carrier: how much of its volume is used, and the weight, volume and number of the units placed in it.'
+      required:
+      - volumeUtilization
+      - loadedWeight
+      - loadedVolume
+      - itemCount
+      properties:
+        volumeUtilization:
+          type: number
+          description: '% of the carrier''s geometry volume used by placements (0-100). Unit-free.'
+        loadedWeight:
+          type: number
+          description: Sum of placement weights, in units.weight.
+        loadedVolume:
+          type: number
+          description: Sum of placement volumes, in units.volume (default m3).
+        itemCount:
+          type: integer
+          format: int32
+          description: Placement count in this carrier.
+    CargoGeometry:
+      description: 'The geometry of a cargo unit, on an inline cargo line and on a SKU (its input and the stored entry): one schema, told apart by `type`, with `box` its only member today. A carrier''s geometry is a `Box`. `geometry.type` and the fields of `constraints` may grow; tolerate values and fields you do not know.'
+      oneOf:
+      - $ref: '#/components/schemas/Box'
+      discriminator:
+        propertyName: type
+        mapping:
+          box: '#/components/schemas/Box'
+    JobRequest:
+      type: object
+      required:
+      - carriers
+      - cargo
+      description: 'The body of `POST /jobs` and `POST /jobs/validate`: the carriers on offer, the cargo to load, and how to solve it. An optional member sent as `null` counts as absent. `GET /jobs/{id}/input` returns an order''s request in this shape, every line inline.'
+      properties:
+        units:
+          anyOf:
+          - $ref: '#/components/schemas/Units'
+          - type: 'null'
+        carriers:
+          type: array
+          minItems: 1
+          maxItems: 200
+          description: 'The carriers available for this job (supply side), tried in the order listed: each entry is used, up to its `quantity`, before the next one is tried, and the result''s `carriers[]` follows the same order. At most 200 entries; more is rejected with 400 against `/carriers`.'
+          items:
+            $ref: '#/components/schemas/CarrierEntry'
+        cargo:
+          type: array
+          minItems: 1
+          maxItems: 5000
+          description: The cargo lines to load (demand side). At most 5,000 lines, whatever their amounts; more is rejected with 400 against `/cargo`.
+          items:
+            $ref: '#/components/schemas/ItemEntry'
+        groups:
+          type:
+          - object
+          - 'null'
+          description: 'Optional. The groups this job declares, keyed by the name a cargo line opts into through its own `groups` array. Declaring a name is what promotes it from a label into a claim on a section of the carrier; a label you do not declare here stays what labels have always been and has no effect on placement. Declaring groups does nothing on its own: `configuration.groupSeparation` is what activates them, so you can leave these declarations in a request permanently and turn the behaviour on and off with one field. At most 20 groups, and a name is at most 64 characters; both are rejected with 400 against `/groups`, and both apply whether or not a separation is set, so switching one on can never turn a body the API accepted into one it rejects. A declared group that no cargo line references is allowed and simply produces no section, so a fixed set of routes can stay in a template.'
+          maxProperties: 20
+          propertyNames:
+            minLength: 1
+            maxLength: 64
+          additionalProperties:
+            $ref: '#/components/schemas/GroupSettings'
+        configuration:
+          anyOf:
+          - $ref: '#/components/schemas/Configuration'
+          - type: 'null'
+        name:
+          type:
+          - string
+          - 'null'
+          maxLength: 256
+          description: 'Optional label for this job, echoed back on the status and result responses. Free text; it has no effect on the packing. Leading and trailing whitespace is trimmed, and a value that is only whitespace is stored as no name at all. `null` is accepted and has the same effect as omitting the key: no name is stored. Change or clear it later with PUT /jobs/{id}/name.'
+        problemType:
+          type:
+          - string
+          - 'null'
+          enum:
+          - LoadPlanning
+          - MixedPalletizing
+          - null
+          default: LoadPlanning
+          description: 'Which problem this job poses. Omit it for load planning (containers, trailers, vans). MixedPalletizing declares a pallet-building job; it requires the feature on your plan and is metered against its own monthly quota. This field, and only this field, selects the problem type - a carrier''s `category` does not. The relationship runs the other way: a carrier that omits `category` has its kind filled in from this field.'
+    UnplacedItem:
+      type: object
+      required:
+      - description
+      - amount
+      - group
+      - groups
+      - itemId
+      - libraryId
+      description: 'A cargo line that could not be fully placed. Intentionally carries no `category`, `geometry`, `weight` or `color`: only what identifies the line and how much of it is missing.'
+      properties:
+        description:
+          type: string
+          description: Echo (may be empty).
+        amount:
+          type: integer
+          format: int32
+          description: Units of this line left unplaced.
+        externalId:
+          type:
+          - string
+          - 'null'
+          description: Echo.
+        group:
+          type: array
+          deprecated: true
+          items:
+            type: string
+          description: 'Deprecated: the same labels as groups. Removed in the next major version.'
+        groups:
+          type: array
+          items:
+            type: string
+          description: Echo of the source cargo line's groups[].
+        itemId:
+          type: string
+          format: uuid
+          description: Same join key as the line's placements.
+        libraryId:
+          type:
+          - string
+          - 'null'
+          format: uuid
+          description: The SKU the cargo line referenced; null for an inline line.
+    ValidateResult:
+      type: object
+      required:
+      - valid
+      - warnings
+      description: This 200 response is only reached when the request validates, so `valid` is always true and `warnings` is always empty today; an invalid body gets a 400 `problem+json` instead of this shape.
+      properties:
+        valid:
+          type: boolean
+        warnings:
+          type: array
+          description: 'Reserved. Always empty today: no warning is emitted, so there is no warning-code registry to switch on. `code` is a plain string rather than a ProblemCode: that enum is the error-code registry and none of its members is a warning.'
+          items:
+            type: object
+            properties:
+              code:
+                type: string
+              pointer:
+                type: string
+              message:
+                type: string
+    JobStatus:
+      type: object
+      required:
+      - jobId
+      - status
+      - createdAt
+      - saved
+      description: The status of one job, as `GET /jobs/{id}` returns it for an order or a loading-instructions job, and as `GET /jobs` lists each order. `queued` and `running` are active; `succeeded`, `failed` and `cancelled` are terminal, and a terminal status does not change.
+      properties:
+        jobId:
+          type: string
+          format: uuid
+        status:
+          type: string
+          enum:
+          - queued
+          - running
+          - succeeded
+          - failed
+          - cancelled
+        percentage:
+          type:
+          - integer
+          - 'null'
+          format: int32
+          minimum: 0
+          maximum: 100
+          description: A packing job reports 0, 50 or 100 only; a derived instructions job reports finer progress.
+        queuePosition:
+          type:
+          - integer
+          - 'null'
+          format: int32
+          description: Always null.
+        errorCategory:
+          type:
+          - string
+          - 'null'
+          description: Failure category. Diagnostic only, not a closed set. Switch on error.code instead.
+        error:
+          type:
+          - object
+          - 'null'
+          description: Present only when status is failed.
+          properties:
+            code:
+              type: string
+              enum:
+              - invalid_input
+              - solver_error
+              - render_error
+              - internal_error
+              description: Closed set.
+            message:
+              type: string
+              description: Safe, human-readable sentence; never contains exception detail.
+        name:
+          type:
+          - string
+          - 'null'
+          maxLength: 256
+          description: The label given at submit or set with PUT /jobs/{id}/name; null when the job has none.
+        createdAt:
+          type: string
+          format: date-time
+          description: When the job was submitted (UTC).
+        problemType:
+          type:
+          - string
+          - 'null'
+          enum:
+          - LoadPlanning
+          - MixedPalletizing
+          - null
+          description: 'The job''s problem type, echoed in its published spelling. Null only for a job with no order of its own: a derived instructions job created by `POST /jobs/{id}/instructions` has nothing to classify.'
+        saved:
+          type: boolean
+          description: Whether this order is kept as a saved load (see `/saved-loads`). Always false for a loading-instructions job.
+    Units:
+      type: object
+      description: 'Per-kind units for the whole job. Interprets all **input** values and formats all **output** values
+
+        (the result echoes this block). Mixing systems across kinds is allowed (e.g. length `cm` + weight `lb`).
+
+        `volume`/`area`/`ldm` are **output-only** (you input dimensions, not volumes).'
+      properties:
+        length:
+          type:
+          - string
+          - 'null'
+          enum:
+          - mm
+          - cm
+          - m
+          - in
+          - ft
+          - null
+          default: m
+        weight:
+          type:
+          - string
+          - 'null'
+          enum:
+          - g
+          - kg
+          - t
+          - lb
+          - null
+          default: kg
+        volume:
+          type:
+          - string
+          - 'null'
+          enum:
+          - m3
+          - cm3
+          - l
+          - ft3
+          - null
+          default: m3
+          description: Output only. Formats `kpis.loadedVolume`.
+        area:
+          type:
+          - string
+          - 'null'
+          enum:
+          - m2
+          - cm2
+          - ft2
+          - null
+          default: m2
+          description: Echoed on the result; no response value is expressed in this unit.
+        ldm:
+          type:
+          - string
+          - 'null'
+          enum:
+          - m
+          - null
+          default: m
+          description: Echoed on the result; no response value is expressed in this unit.
+      additionalProperties: false
+    GroupSettings:
+      type: object
+      description: Settings shared by every cargo line that names this group. Two properties today; more per-group settings land here beside them rather than introducing a second groups concept.
+      properties:
+        packingOrder:
+          type:
+          - integer
+          - 'null'
+          format: int32
+          minimum: 1
+          maximum: 2147483647
+          description: 'Where this group''s section sits along the packing axis. 1 is nearest the carrier origin, the `x = 0` end that the default `-X` consolidation packs toward, and higher numbers follow behind it. Values must be distinct across the declared groups, but they need not be contiguous: 10, 20, 30 is as valid as 1, 2, 3, and leaves room to insert a group later without renumbering. Required on every declared group whenever `configuration.groupSeparation` is set; a group without one is rejected with 400 against `/groups/<name>/packingOrder`. A value below 1 or a duplicate is rejected the same way (a duplicate against the second group that uses it).'
+        keepTogether:
+          type:
+          - boolean
+          - 'null'
+          default: true
+          description: 'Whether this group stays on one carrier. Optional: omitted or null means true. Takes effect only while `configuration.groupSeparation` is set. When the group does not fit entirely on a carrier, that carrier closes at this group: the group and every section packed behind it, including the cargo that matches no declared group, continue on the next carrier, and the room behind the cut stays empty. A group too large for the empty carrier it would start on goes to the first later entry in `carriers[]` whose empty carrier takes it whole, for that carrier only. Only a group no entry can take whole is split, and every carrier it spans starts with it. Each of those carriers is chosen the same way: what is left of the group goes to the first entry whose empty carrier takes it whole or, while none does, to the first entry whose empty carrier takes each of its units on its own. A unit that fits no carrier at all is left unplaced on its own and never holds its group back. When the carriers run out, a group that would fit an empty carrier comes back whole in `unplacedItems`, with everything packed behind it, rather than partly loaded. Set false to let the group be split across carriers instead.'
+    JobAccepted:
+      type: object
+      description: The job the request created, or on a replay the original job, with its status at the time of the answer.
+      required:
+      - jobId
+      - status
+      properties:
+        jobId:
+          type: string
+          format: uuid
+        status:
+          type: string
+          enum:
+          - queued
+          - running
+          - succeeded
+          - failed
+          - cancelled
+          description: 'The job''s status at the time of this answer: `queued` for a new job. A replay of an earlier submit (see the `Idempotency-Key` header) carries the original job in the status it has now, which can be any of these.'
+    JobInput:
+      type: object
+      required:
+      - resolvedAt
+      - request
+      - sources
+      description: The request of an order, every line inline, with each library reference resolved to the values the solver used. An order accepted before the current request maxima existed reads back as it was sent, so it can exceed them.
+      properties:
+        resolvedAt:
+          type: string
+          format: date-time
+          description: The order's `createdAt` (UTC).
+        request:
+          $ref: '#/components/schemas/JobRequest'
+        sources:
+          type: array
+          description: 'The library entries the request used, one item per entry, in the order each first appears: carriers first, then cargo, each in request order. Empty when no line referenced a library entry.'
+          items:
+            type: object
+            required:
+            - libraryId
+            - revision
+            - lines
+            properties:
+              libraryId:
+                type: string
+                maxLength: 64
+                description: 'The id of the library entry, as `/result` echoes it: a lowercase UUID, or a system catalogue slug. It names the entry, as a line''s `libraryId` does, not the library that holds it.'
+              revision:
+                type: integer
+                format: int32
+                minimum: 1
+                description: The entry's revision when the order was submitted.
+              lines:
+                type: array
+                items:
+                  type: string
+                  format: json-pointer
+                description: The lines of `request` this entry resolved, as JSON Pointers (RFC 6901) relative to `request`, such as `/carriers/0` or `/cargo/3`.
+    PackedCarrier:
+      type: object
+      description: One carrier instance in the result, with its key figures and the units placed in it.
+      required:
+      - externalId
+      - instance
+      - geometry
+      - kpis
+      - placements
+      - libraryId
+      properties:
+        externalId:
+          type:
+          - string
+          - 'null'
+          description: Echo of the label. Null only for a carrier that references a library entry when neither the job line nor the entry has a label.
+        name:
+          type:
+          - string
+          - 'null'
+          description: Echo.
+        instance:
+          type: integer
+          format: int32
+          description: 1-based instance number for this carrier type (an unlimited-quantity type can yield several).
+        geometry:
+          $ref: '#/components/schemas/Geometry'
+        kpis:
+          $ref: '#/components/schemas/CarrierKpis'
+        placements:
+          type: array
+          description: The units placed in this carrier. Carriers never nest, so this list is flat.
+          items:
+            $ref: '#/components/schemas/Placement'
+        category:
+          type:
+          - string
+          - 'null'
+          enum:
+          - container
+          - pallet
+          - truck
+          - trailer
+          - null
+          description: 'The carrier kind: the submitted category, or the kind filled in from problemType when the entry omitted one. The set may grow; tolerate values you do not know.'
+        libraryId:
+          type:
+          - string
+          - 'null'
+          description: The library entry this carrier referenced; null for an inline carrier.
+    Configuration:
+      type: object
+      description: Two independent, optional switches, not ordered lexicographic tie-breakers.
+      properties:
+        objective:
+          type:
+          - string
+          - 'null'
+          enum:
+          - MinimizeCarriers
+          - null
+          default: MinimizeCarriers
+          description: The only supported primary objective. Omitted, null or "" also resolves to MinimizeCarriers; any other value is rejected with 400.
+        secondaryObjectives:
+          type:
+          - array
+          - 'null'
+          maxItems: 2
+          description: At most one entry per type; order has no effect. A duplicate type, or a null entry, is rejected with 400.
+          items:
+            $ref: '#/components/schemas/SecondaryObjective'
+        groupSeparation:
+          anyOf:
+          - $ref: '#/components/schemas/GroupSeparation'
+          - type: 'null'
+          description: Optional. Present activates group separation for the groups declared in the job's `groups` block; absent or null means none, which is the behaviour of every request that omits it. Rejected with 400 when the job declares no group to separate.
+    CarrierOverrides:
+      type: object
+      description: Per-job adjustments of a referenced library entry. `maxStackHeight` is the only member today.
+      properties:
+        maxStackHeight:
+          type:
+          - number
+          - 'null'
+          exclusiveMinimum: 0
+          description: 'Load height for this job, in `units.length` (the job''s unit, not the entry''s). On a pallet it replaces the entry''s `dimensionZ`, the default load height above the deck. On a container, truck or trailer it may lower the usable height but not exceed the entry''s own: a larger value is rejected with 400 against `/carriers/{i}/overrides/maxStackHeight`. Any other member is rejected with field code `override_field_not_allowed`.'
+    ShareLink:
+      type: object
+      description: 'A job''s share link: the token, the link to hand out and when it stops working.'
+      required:
+      - shareId
+      - expiresAt
+      properties:
+        shareId:
+          type: string
+          pattern: ^[A-Za-z0-9_-]{43}$
+          description: 'Opaque, unguessable token identifying this share: distinct from the job id. It is what the link carries; it is not a URL, and it is not a credential for this API.'
+        url:
+          type:
+          - string
+          - 'null'
+          format: uri
+          description: 'The link to hand out: the read-only 3D viewer, openable in any browser with no API key. Null when the API has no viewer link to give out.'
+        expiresAt:
+          type: string
+          format: date-time
+          description: When the link stops working. DELETE the share to revoke sooner.
+    Box:
+      type: object
+      required:
+      - type
+      - dimensionX
+      - dimensionY
+      - dimensionZ
+      description: 'Box geometry on a carrier, a cargo line or a library entry. X = length, Y = width, Z = height, in units.length (an entry''s own units on a library entry). Box is the only geometry this API implements; any other `type` is rejected with 400. `geometry.type` and the fields of `constraints` may grow; tolerate values and fields you do not know.
+
+
+        Each dimension must be greater than 0 and at most **100 m** after conversion from `units.length`, so the accepted range depends on the unit you declared: 100000 in `mm`, 100 in `m`, 328.08 in `ft`. The bound is not a fixed `maximum` in this schema for that reason. A value past it is rejected with `400` against the field you sent (e.g. `/cargo/0/geometry/dimensionX`). Dimensions are handled to the nearest millimetre, so a positive value below half a millimetre is rejected too.'
+      properties:
+        type:
+          const: box
+        dimensionX:
+          type: number
+          exclusiveMinimum: 0
+        dimensionY:
+          type: number
+          exclusiveMinimum: 0
+        dimensionZ:
+          type: number
+          exclusiveMinimum: 0
+    JobPage:
+      type: object
+      required:
+      - items
+      - nextCursor
+      description: One page of `GET /jobs`.
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/JobStatus'
+        nextCursor:
+          type:
+          - string
+          - 'null'
+          pattern: ^[A-Za-z0-9_-]+$
+          description: 'Pass it as `cursor` for the next page; null on the last page. Opaque: do not build or parse it.'
+  examples:
+    NotEntitled:
+      summary: The key is valid; the plan is not
+      value:
+        type: https://tools.ietf.org/html/rfc9110#section-15.5.4
+        title: The account's plan does not include the customer API.
+        status: 403
+        code: customer_api_not_entitled
+        detail: 'Upgrade the account to a plan that includes customer-API access: https://app.loadoptimizer.ai/home/billing'
+    OnePalletTwoBoxes:
+      summary: One pallet type, one cargo line of two units
+      value:
+        units:
+          length: m
+          weight: kg
+        carriers:
+        - externalId: EUR-PALLET
+          geometry:
+            type: box
+            dimensionX: 1.2
+            dimensionY: 0.8
+            dimensionZ: 1.5
+        cargo:
+        - externalId: SKU-123
+          description: Box A
+          amount: 2
+          weight: 5.0
+          geometry:
+            type: box
+            dimensionX: 0.3
+            dimensionY: 0.4
+            dimensionZ: 0.2
+    BodyNotSupported:
+      summary: A request body was sent and this operation accepts none
+      value:
+        type: https://tools.ietf.org/html/rfc9110#section-15.5.4
+        title: This endpoint does not accept a request body.
+        status: 403
+        code: request_body_not_supported
+        detail: Send the request without a body.
+    JobNotFound:
+      summary: Unknown id, or someone else's job
+      value:
+        type: https://tools.ietf.org/html/rfc9110#section-15.5.5
+        title: Job not found.
+        status: 404
+        code: job_not_found
+    MixedPalletsForOneStore:
+      summary: 'Mixed palletizing: three cargo lines onto as few EUR pallets as they fit on'
+      value:
+        units:
+          length: m
+          weight: kg
+        problemType: MixedPalletizing
+        name: Store 104 mixed pallets
+        carriers:
+        - externalId: EUR-PALLET
+          name: EUR pallet, 1.8 m build height
+          category: pallet
+          geometry:
+            type: box
+            dimensionX: 1.2
+            dimensionY: 0.8
+            dimensionZ: 1.8
+          quantity: null
+          tareWeight: 25
+        cargo:
+        - externalId: SKU-4001
+          description: Beverage crate
+          amount: 24
+          weight: 12.5
+          geometry:
+            type: box
+            dimensionX: 0.4
+            dimensionY: 0.3
+            dimensionZ: 0.25
+          constraints:
+            allowStackingOnTop: true
+            allowedRotations:
+            - Z
+          groups:
+          - store-104
+        - externalId: SKU-4002
+          description: Cereal case
+          amount: 18
+          weight: 4.0
+          geometry:
+            type: box
+            dimensionX: 0.6
+            dimensionY: 0.4
+            dimensionZ: 0.3
+          constraints:
+            allowStackingOnTop: true
+          groups:
+          - store-104
+        - externalId: SKU-4003
+          description: Egg tray
+          amount: 6
+          weight: 2.2
+          geometry:
+            type: box
+            dimensionX: 0.3
+            dimensionY: 0.3
+            dimensionZ: 0.15
+          constraints:
+            allowStackingOnTop: false
+            allowedRotations: []
+          groups:
+          - store-104
+        configuration:
+          objective: MinimizeCarriers
+          secondaryObjectives:
+          - type: CenterLoadMass
+    CargoFromSkuLibrary:
+      summary: Cargo lines that reference SKUs from your company SKU library, next to an inline line
+      value:
+        units:
+          length: m
+          weight: kg
+        carriers:
+        - externalId: TRAILER
+          geometry:
+            type: box
+            dimensionX: 13.6
+            dimensionY: 2.48
+            dimensionZ: 2.7
+        cargo:
+        - libraryId: 0197d1e4-2a6b-7f3c-8d15-4b9e0c7a2f68
+          amount: 24
+          groups:
+          - store-104
+          color: '#3366cc'
+          overrides:
+            constraints:
+              allowStackingOnTop: true
+        - libraryId: 0197d1e4-2a6b-7f3c-8d15-4b9e0c7a2f68
+          amount: 6
+          description: Carton 60x40, this side up
+          overrides:
+            constraints:
+              allowedRotations: []
+        - externalId: SPOT-ITEM
+          description: Loose crate
+          amount: 2
+          weight: 30
+          geometry:
+            type: box
+            dimensionX: 0.8
+            dimensionY: 0.6
+            dimensionZ: 0.5
+  responses:
+    TooManyActiveJobs:
+      description: "Three different limits answer `429`, and the `code` says which one you hit.\n\n- `rate_limit_exceeded`: too many requests, too fast. The account may make **300 requests per\n  minute** across `/v2`, replenished continuously. This response carries a **`Retry-After`** header\n  with the number of seconds to wait; no response with any other `code` carries one.\n- `too_many_active_jobs`: the account already has its maximum number of jobs queued or running,\n  instructions jobs included. Wait for one to finish. **No `Retry-After`**.\n- `monthly_quota_exceeded`: the monthly job quota is used up. **No `Retry-After`**; it resets at the\n  start of the next month (`GET /jobs/{id}` keeps working for jobs you already submitted).\n\nAll three are retryable. For the two without a header, back off on a schedule of your own choosing."
+      headers:
+        Retry-After:
+          description: 'Seconds to wait before retrying. Sent only with `code: "rate_limit_exceeded"`.'
+          schema:
+            type: integer
+            format: int32
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/Problem'
+          examples:
+            rateLimited:
+              summary: Too many requests too fast; the only response with Retry-After
+              value:
+                title: Too many requests.
+                status: 429
+                code: rate_limit_exceeded
+                detail: The account exceeded the request rate for the customer API. Retry after the number of seconds in the Retry-After header.
+            tooManyActive:
+              summary: Concurrency limit; no Retry-After
+              value:
+                title: Too Many Requests
+                status: 429
+                code: too_many_active_jobs
+                detail: Too many active jobs (limit 5). Wait for jobs to finish and retry.
+            monthlyQuota:
+              summary: Monthly quota used up; no Retry-After
+              value:
+                title: Too Many Requests
+                status: 429
+                code: monthly_quota_exceeded
+                detail: Monthly order quota reached (limit 100).
+    Forbidden:
+      description: 'The API key is valid, but the account''s plan does not include customer-API access (`code: "customer_api_not_entitled"`). Permanent, not transient: retrying will not help; the account''s plan must add customer-API access first.'
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/Problem'
+          examples:
+            notEntitled:
+              $ref: '#/components/examples/NotEntitled'
+    IdempotencyConflict:
+      description: 'Idempotency-Key reused with a different request body. Empty body: no code, no detail.'
+    LibrariesForbidden:
+      description: 'Either your plan has no customer-API access at all (`customer_api_not_entitled`), or it does not include the company library the id names (`libraries_not_entitled`): a type is available when the plan includes company libraries and its own size limit is not 0. The second is answered before any lookup, so it never tells you whether a library exists.'
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/Problem'
+          examples:
+            notEntitled:
+              $ref: '#/components/examples/NotEntitled'
+            librariesNotEntitled:
+              summary: The plan does not include company libraries
+              value:
+                type: https://tools.ietf.org/html/rfc9110#section-15.5.4
+                title: Company libraries are not available on your plan.
+                status: 403
+                code: libraries_not_entitled
+                detail: Your plan does not include company libraries.
+    RateLimited:
+      description: 'Too many requests, too fast (`code: "rate_limit_exceeded"`). The account may make **300 requests per minute** across `/v2`, replenished continuously, and every operation except `GET /health` counts. The request was not carried out: wait the number of seconds in the **`Retry-After`** header, then send it again. A full queue and a used-up monthly quota answer `429` on `POST /jobs` only.'
+      headers:
+        Retry-After:
+          description: Seconds to wait before retrying.
+          schema:
+            type: integer
+            format: int32
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/Problem'
+          examples:
+            rateLimited:
+              summary: Too many requests too fast
+              value:
+                title: Too many requests.
+                status: 429
+                code: rate_limit_exceeded
+                detail: The account exceeded the request rate for the customer API. Retry after the number of seconds in the Retry-After header.
+    ValidationProblem:
+      description: 'Validation failed: `code: "validation_failed"`, with `errors[]` naming each offending field, query parameter or header. Every 400 on `/v2` has this shape; see Errors & troubleshooting.'
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/Problem'
+          examples:
+            invalidGeometry:
+              summary: A cargo line with a geometry type the API does not implement
+              value:
+                type: https://tools.ietf.org/html/rfc9110#section-15.5.1
+                title: Validation failed.
+                status: 400
+                code: validation_failed
+                errors:
+                - pointer: /cargo/0/geometry/type
+                  code: validation_failed
+                  message: Only 'box' geometry is supported.
+    EntitlementProblem:
+      description: Job exceeds the account's entitlement. `code` says which of the three limits was hit (`max_items_per_job`, `max_carriers_per_job` or `max_carrier_instances_per_job`) and `detail` repeats it in prose with the limit's value. They are checked in that order and the first one hit is reported, so a job over two limits at once names only the first.
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/Problem'
+          examples:
+            tooManyItems:
+              summary: More cargo units than the plan allows
+              value:
+                type: https://tools.ietf.org/html/rfc4918#section-11.2
+                title: Unprocessable Entity
+                status: 422
+                code: max_items_per_job
+                detail: Job exceeds the maximum of 500 items.
+    Unauthorized:
+      description: Missing, invalid or revoked API key. Empty body.
+    ServerProblem:
+      description: 'The request could not be completed for a reason the API did not anticipate. Transient as far as a caller can tell: retry, and if it persists contact support. The cause is recorded internally and is deliberately absent from the body, so there is nothing here to branch on beyond `code`.'
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/Problem'
+          examples:
+            internalServerError:
+              summary: An unanticipated failure while handling the request
+              value:
+                type: https://tools.ietf.org/html/rfc9110#section-15.6.1
+                title: Internal server error.
+                status: 500
+                code: internal_server_error
+                detail: The request could not be completed. Retry; if it keeps failing, contact support.
+    UnsupportedMediaType:
+      description: 'The request body was sent under a content type other than `application/json`, or without one (`code: "unsupported_media_type"`). These operations read JSON only.'
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/Problem'
+          examples:
+            wrongContentType:
+              summary: A body sent as something other than JSON
+              value:
+                type: https://tools.ietf.org/html/rfc9110#section-15.5.16
+                title: Unsupported media type.
+                status: 415
+                code: unsupported_media_type
+                detail: Send the request body as application/json.
+    PayloadTooLarge:
+      description: 'The request body is larger than the API will read (`code: "payload_too_large"`). Permanent for that body: split the order into smaller jobs rather than retrying it unchanged.'
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/Problem'
+          examples:
+            bodyTooLarge:
+              summary: A body past the size the API reads
+              value:
+                type: https://tools.ietf.org/html/rfc9110#section-15.5.14
+                title: Payload too large.
+                status: 413
+                code: payload_too_large
+                detail: The request body is larger than this API accepts. Split the order into smaller jobs.
+    NotFoundProblem:
+      description: 'Unknown job id, an id that is not a UUID in its 36-character form, or a job belonging to another account: all answer identically (no existence leak).'
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/Problem'
+          examples:
+            unknownJob:
+              $ref: '#/components/examples/JobNotFound'
+  parameters:
+    JobId:
+      name: id
+      in: path
+      required: true
+      description: The id of one of your jobs, as `POST /jobs` or `POST /jobs/{id}/instructions` returned it.
+      schema:
+        type: string
+        format: uuid
+        maxLength: 36
+    IdempotencyKey:
+      name: Idempotency-Key
+      in: header
+      required: false
+      description: 'Resubmitting the same key + same body returns the original job (on `POST /jobs`) or the original entry (on `POST /libraries/{id}/entries`) rather than creating a duplicate; same key + a different body → `409` (empty body). The whole submitted body is the fingerprint, values as sent (an enum value in another case is a different body), `units` included: no field is exempt. The replay and the `409` hold while the key is kept: on `POST /jobs` for at least 24 hours after the job was submitted, and for as long as it is queued or running, after which the same key can start a new job; on entry creation as long as that entry exists, so a retry after the entry was deleted creates a new entry. Max 200 chars; an oversized key is rejected with `400` `validation_failed`, pointer `Idempotency-Key`.'
+      schema:
+        type: string
+        maxLength: 200
+  securitySchemes:
+    ApiKey:
+      type: apiKey
+      in: header
+      name: X-Api-Key
+      description: 'Customer API key bound to your account, e.g. `X-Api-Key: ck_live_...`. Create it in the web app (see https://app.loadoptimizer.ai/docs/api-keys); the full key is shown only once.'
