@@ -608,3 +608,9 @@ components:
       in: header
       name: X-Api-Key
       description: 'Customer API key bound to your account, e.g. `X-Api-Key: ck_live_...`. Create it in the web app (see https://app.loadoptimizer.ai/docs/api-keys); the full key is shown only once.'
+x-provenance:
+  method: harvested
+  publisher: LoadOptimizer.ai
+  source: https://www.loadoptimizer.ai/docs/loadoptimizer-openapi.yaml
+  note: split by refine-openapis from the provider's own published document, verified by fetch (openapi/_original/*.fetch.json);
+    stamped by stamp-openapi-provenance.py (roadmap#793)
