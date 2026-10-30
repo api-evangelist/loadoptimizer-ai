@@ -64,5 +64,116 @@
 > Full detail: **[Where this data comes from](https://apievangelist.com/about/where-our-data-comes-from)**
 <!-- API-EVANGELIST-PROVENANCE:END -->
 
-LoadOptimizer.ai is a company surfaced via the API Evangelist harvest backlog (source: new-submission) and added to the network as a stub for full-pipeline profiling.
-- https://www.loadoptimizer.ai/
+LoadOptimizer.ai provides an AI‑powered 3‑D load‑planning service for containers, trucks and pallets. Its API lets developers submit a job describing items, dimensions and constraints, then poll for a detailed load plan that optimizes space utilization, reduces trips and cuts costs. The platform supports REST/JSON with OpenAPI 3.1, offers idempotent job handling, and includes authentication via API keys. It targets logistics, shipping and warehousing companies seeking automated load optimization.
+
+**Areas:** Logistics · Artificial Intelligence · Load Planning · Optimization · Shipping
+
+## LoadOptimizer.ai on APIs.io
+
+Everything profiled for LoadOptimizer.ai is published on APIs.io rather than in this repository. Start at the provider page — **[apis.io/providers/loadoptimizer-ai/](https://apis.io/providers/loadoptimizer-ai/)** — or go straight to one of the APIs or properties below.
+
+### APIs (2)
+
+- [LoadOptimizer.ai Health API](https://apis.io/apis/loadoptimizer-ai/loadoptimizer-ai-health-api/) — The Health API from LoadOptimizer.ai — 1 operation(s) for health.
+- [LoadOptimizer.ai Jobs API](https://apis.io/apis/loadoptimizer-ai/loadoptimizer-ai-jobs-api/) — The Jobs API from LoadOptimizer.ai — 2 operation(s) for jobs.
+
+### Published properties
+
+Each property below is a page on APIs.io carrying the machine-readable artifact and what it says.
+
+#### AsyncAPI (1)
+
+Event-driven and webhook contracts.
+
+- [Loadoptimizer Ai Webhooks](https://apis.io/asyncapis/loadoptimizer-ai/loadoptimizer-ai-webhooks/)
+
+#### Agentic access (1)
+
+Which operations an agent can call, which act, and which need a human in the loop.
+
+- [Loadoptimizer Ai Agentic Access](https://apis.io/agentic-access/loadoptimizer-ai/loadoptimizer-ai-agentic-access/)
+
+#### Governance rules (1)
+
+Spectral rulesets for the provider's contracts.
+
+- [LoadOptimizer.ai API Rules](https://apis.io/rules/loadoptimizer-ai/loadoptimizer-ai-rules/)
+
+#### Security (2)
+
+Authentication, trust centre, and vulnerability disclosure.
+
+- [Loadoptimizer Ai Authentication](https://apis.io/security/loadoptimizer-ai/loadoptimizer-ai-authentication/)
+- [Loadoptimizer Ai Domain Security](https://apis.io/security/loadoptimizer-ai/loadoptimizer-ai-domain-security/)
+
+#### Plans and pricing (1)
+
+Published plans, tiers and prices.
+
+- [Loadoptimizer Ai Plans Pricing](https://apis.io/plans/loadoptimizer-ai/loadoptimizer-ai-plans-pricing/)
+
+## Where to find this API
+
+Links to the company's own pages. This repository publishes no copy of their specifications — the canonical document is theirs and lives at the URLs below.
+
+- [Website](https://www.loadoptimizer.ai/)
+- [Documentation](https://www.loadoptimizer.ai/docs/)
+- [Getting started](https://www.loadoptimizer.ai/docs/quickstart.html)
+- [Pricing](https://www.loadoptimizer.ai/pricing/)
+- [Blog](https://www.loadoptimizer.ai/blog)
+- [Terms of service](https://www.loadoptimizer.ai/terms-and-conditions/)
+
+## API Evangelist rating
+
+**Kin Score 46.0** — developing · rubric 0.25.0 · scored 2026-10-23
+
+| Facet | Score |
+|---|---|
+| Discoverability | 69.6 |
+| Contract quality | 61.2 |
+| Contract governance | 18.2 |
+| Operational transparency | 7.9 |
+| Developer ergonomics | 37.5 |
+| Access clarity | 65.8 |
+
+**Agent readiness 57.3** — agent-native
+
+| Agent-readiness dimension | Result |
+|---|---|
+| Spec Presence | yes |
+| Agentic Access | derived (partial credit) |
+| Reversibility Documented | — |
+| MCP Server | — |
+| Auth Clarity | served (partial credit) |
+| Idempotency | verified |
+| Error Semantics | verified |
+| OpenAPI Examples | verified |
+| Rate Limit Signal | verified |
+| Event Surface Described | yes |
+| Agent Skills | derived (partial credit) |
+| Well Known Catalog | — |
+| Consent Identity | — |
+| Agent Card | — |
+| Dry Run Mode | — |
+| Delegated Identity | served (partial credit) |
+| Protected Resource Metadata | verified |
+| Dynamic Client Registration | — |
+| Agentic Commerce | — |
+| Pagination Ratio | partial |
+| Operation Distinctiveness | distinct |
+
+**Regulatory alignment 19.1** — Horizontal (data, software, accessibility, platform)
+
+The rubric is published at [github.com/api-evangelist/kin-score](https://github.com/api-evangelist/kin-score). The per-check breakdown behind these numbers — which checks were earned, partial or missed — along with score history and how this provider compares to its peers, is available at [apis.io/providers/loadoptimizer-ai/](https://apis.io/providers/loadoptimizer-ai/).
+
+## How this profile is made
+
+API Evangelist profiles a company's public API surface the way a developer would find it: the website, developer portal and documentation, the specifications it publishes, its public repositories, and its pricing, status and changelog pages. From that it derives the properties above — contracts split per API, workflows, schemas, collections, governance rules, plans and rate limits — and scores them against the published [Kin Score rubric](https://github.com/api-evangelist/kin-score).
+
+The artifacts are published on [APIs.io](https://apis.io), not in this repository. This repository is the public record for LoadOptimizer.ai: the place to say something is wrong, missing or out of date, and to ask for a re-score or a removal.
+
+## Open an issue
+
+- **Something about this listing** — a wrong description, a missing API, a stale artifact or a question about the rating: [open an issue on this repository](https://github.com/api-evangelist/loadoptimizer-ai/issues/new).
+- **A new API, or one that is not in the catalog yet** — [submit it on APIs.io](https://apis.io/add/).
+- **Anything else** — [the APIs.io inbox](https://github.com/api-search/inbox/issues/new) or [info@apievangelist.com](mailto:info@apievangelist.com).
